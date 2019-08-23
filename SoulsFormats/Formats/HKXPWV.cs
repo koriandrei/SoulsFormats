@@ -45,13 +45,6 @@ namespace SoulsFormats
         public uint UnkC { get; set; }
 
         /// <summary>
-        /// Amount of bone map entries going between the anim skeleton and the ragdoll skeleton.
-        /// A list of constant-value structs, with bytes FF FF 00 00 for each, 
-        /// is generated automatically.
-        /// </summary>
-        public ushort BoneMapEntryCount { get; set; }
-
-        /// <summary>
         /// List of items which affect bone map entries in the HKX.
         /// </summary>
         public List<BoneMapEntry> BoneMapEntries { get; set; }
@@ -93,19 +86,19 @@ namespace SoulsFormats
 
             br.AssertInt16(0);
 
-            BoneMapEntryCount = br.ReadUInt16();
-            ushort animBoneCount = br.ReadUInt16();
-            ushort ragdollBoneCount = br.ReadUInt16();
+            ushort boneMapEntryCount = br.ReadUInt16();
+            ushort animBoneEntryCount = br.ReadUInt16();
+            ushort ragdollBoneEntryCount = br.ReadUInt16();
 
-            if (br.Length == (0x20 + (BoneMapEntryCount * 8) + (animBoneCount * 8) + (ragdollBoneCount * 16)))
+            if (br.Length == (0x20 + (boneMapEntryCount * 8) + (animBoneEntryCount * 8) + (ragdollBoneEntryCount * 16)))
             {
                 Game = GameType.BB;
             }
-            else if (br.Length == (0x20 + (BoneMapEntryCount * 4) + (animBoneCount * 8) + (ragdollBoneCount * 16)))
+            else if (br.Length == (0x20 + (boneMapEntryCount * 4) + (animBoneEntryCount * 8) + (ragdollBoneEntryCount * 16)))
             {
                 Game = GameType.DS3;
             }
-            else if (br.Length == (0x20 + (BoneMapEntryCount * 4) + (animBoneCount * 8) + (ragdollBoneCount * 8)))
+            else if (br.Length == (0x20 + (boneMapEntryCount * 4) + (animBoneEntryCount * 8) + (ragdollBoneEntryCount * 8)))
             {
                 Game = GameType.DS1;
             }
@@ -119,13 +112,13 @@ namespace SoulsFormats
             for (int i = 0; i < 4; i++)
                 br.AssertInt32(0);
 
-            for (int i = 0; i < BoneMapEntryCount; i++)
+            for (int i = 0; i < boneMapEntryCount; i++)
                 BoneMapEntries.Add(new BoneMapEntry(br, Game));
 
-            for (int i = 0; i < animBoneCount; i++)
+            for (int i = 0; i < animBoneEntryCount; i++)
                 AnimBoneEntries.Add(new AnimBoneEntry(br));
 
-            for (int i = 0; i < ragdollBoneCount; i++)
+            for (int i = 0; i < ragdollBoneEntryCount; i++)
                 RagdollBoneEntries.Add(new RagdollBoneEntry(br, Game));
         }
 
@@ -138,7 +131,7 @@ namespace SoulsFormats
 
             bw.WriteInt16(0);
 
-            bw.WriteUInt16(BoneMapEntryCount);
+            bw.WriteUInt16((ushort)BoneMapEntries.Count);
             bw.WriteUInt16((ushort)AnimBoneEntries.Count);
             bw.WriteUInt16((ushort)RagdollBoneEntries.Count);
 
