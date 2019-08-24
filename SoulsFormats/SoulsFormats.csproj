@@ -155,7 +155,7 @@
     <Compile Include="Formats\PARAM\PARAM.Layout.cs" />
     <Compile Include="Formats\DDS.cs" />
     <Compile Include="Formats\PMDCL.cs" />
-    <Compile Include="Formats\TAE3\TAE3.cs" />
+    <Compile Include="Formats\TAE.cs" />
     <Compile Include="Formats\TPF\Headerizer.cs" />
     <Compile Include="Binder\IBinder.cs" />
     <Compile Include="Oodle26.cs" />
@@ -164,9 +164,6 @@
     <Compile Include="SoulsFile.cs" />
     <Compile Include="SFUtil.cs" />
     <Compile Include="SupportsAlphaAttribute.cs" />
-  </ItemGroup>
-  <ItemGroup>
-    <Compile Include="Formats\TAE3\TAE3.Event.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

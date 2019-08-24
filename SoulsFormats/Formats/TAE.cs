@@ -1,0 +1,914 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+
+namespace SoulsFormats
+{
+    /// <summary>
+    /// Controls when different events happen during animations; this specific version is used in DS3. Extension: .tae
+    /// </summary>
+    public class TAE : SoulsFile<TAE>
+    {
+        /// <summary>
+        /// Which format this file is.
+        /// </summary>
+        public enum TAEFormat
+        {
+            /// <summary>
+            /// Dark Souls 1.
+            /// </summary>
+            DS1,
+            /// <summary>
+            /// Dark Souls II: Scholar of the First Sin. 
+            /// Does not support 32-bit original Dark Souls II release.
+            /// </summary>
+            SOTFS,
+            /// <summary>
+            /// Dark Souls III and Bloodborne
+            /// </summary>
+            DS3,
+            /// <summary>
+            /// Sekiro: Shadows Die Twice
+            /// </summary>
+            SDT
+        }
+
+        /// <summary>
+        /// The format of this file. Different between most games.
+        /// </summary>
+        public TAEFormat Format { get; set; }
+
+        /// <summary>
+        /// Whether the format is big endian.
+        /// Only valid for DS1 files.
+        /// </summary>
+        public bool BigEndian { get; set; }
+
+        /// <summary>
+        /// ID number of this TAE.
+        /// </summary>
+        public int ID;
+
+        /// <summary>
+        /// Unknown flags.
+        /// </summary>
+        public byte[] Flags { get; private set; }
+
+        /// <summary>
+        /// Unknown .hkt file.
+        /// </summary>
+        public string SkeletonName;
+
+        /// <summary>
+        /// Unknown .sib file.
+        /// </summary>
+        public string SibName;
+
+        /// <summary>
+        /// Animations controlled by this TAE.
+        /// </summary>
+        public List<Animation> Animations;
+
+        /// <summary>
+        /// Unknown; chr tae: 0x15; obj tae: 0x4, 0x8, 0xE, 0xF, 0x10, 0x12, 0x13, 0x14, 0x15; mov tae: 0x4.
+        /// </summary>
+        public long Unk30;
+
+        internal override bool Is(BinaryReaderEx br)
+        {
+            string magic = br.GetASCII(0, 4);
+            return magic == "TAE ";
+        }
+
+        internal override void Read(BinaryReaderEx br)
+        {
+            br.BigEndian = false;
+            br.Varint64Bit = false;
+
+            br.AssertASCII("TAE ");
+
+            bool isBigEndian = br.AssertByte(0, 1) == 1;
+            br.BigEndian = isBigEndian;
+
+            br.AssertByte(0);
+            br.AssertByte(0);
+
+            bool is64Bit = br.AssertByte(0, 0xFF) == 0xFF;
+            br.Varint64Bit = is64Bit;
+
+            // 0x1000B: DeS, DS1(R)
+            // 0x1000C: DS2, DS2 SOTFS, BB, DS3
+            // 0x1000D: SDT
+            int version = br.AssertInt32(0x1000B, 0x1000C, 0x1000D);
+
+            if (version == 0x1000B && !is64Bit)
+            {
+                Format = TAEFormat.DS1;
+            }
+            else if (version == 0x1000C && !is64Bit)
+            {
+                throw new NotImplementedException("Dark Souls II 32-Bit original release not supported. Only Scholar of the First Sin.");
+            }
+            else if (version == 0x1000C && is64Bit)
+            {
+                Format = TAEFormat.DS3;
+            }
+            else if (version == 0x1000D)
+            {
+                Format = TAEFormat.SDT;
+            }
+            else
+            {
+                throw new System.IO.InvalidDataException("Invalid combination of TAE header values: " +
+                    $"IsBigEndian={isBigEndian}, Is64Bit={is64Bit}, Version={version}");
+            }
+
+            br.ReadInt32(); // File size
+            br.AssertVarint(0x40);
+            br.AssertVarint(1);
+            br.AssertVarint(0x50);
+
+            if (is64Bit)
+                br.AssertVarint(0x80);
+            else
+                br.AssertVarint(0x70);
+
+            Unk30 = br.ReadVarint();
+            br.AssertVarint(0);
+
+            if (Format == TAEFormat.DS1)
+            {
+                br.AssertInt64(0);
+                br.AssertInt64(0);
+                br.AssertInt64(0);
+            }
+
+            Flags = br.ReadBytes(8);
+
+            var unkFlagA = br.ReadBoolean();
+            var unkFlagB = br.ReadBoolean();
+
+            if (!unkFlagA && unkFlagB)
+                Format = TAEFormat.SOTFS;
+            else if ((unkFlagA && unkFlagB) || (!unkFlagA && !unkFlagB))
+                throw new System.IO.InvalidDataException("Invalid unknown flags at 0x48.");
+
+            for (int i = 0; i < 6; i++)
+                br.AssertByte(0);
+
+            ID = br.ReadInt32();
+
+            int animCount = br.ReadInt32();
+            long animsOffset = br.ReadVarint();
+            br.ReadVarint(); // Anim groups offset
+
+            br.AssertVarint(Format == TAEFormat.DS1 ? 0x90 : 0xA0);
+            br.AssertVarint(animCount);
+            br.ReadVarint(); // First anim offset
+            if (Format == TAEFormat.DS1)
+                br.AssertInt32(0);
+            br.AssertVarint(1);
+            br.AssertVarint(Format == TAEFormat.DS1 ? 0x80 : 0x90);
+            if (Format == TAEFormat.DS1)
+                br.AssertInt64(0);
+            br.AssertInt32(ID);
+            br.AssertInt32(ID);
+            br.AssertVarint(0x50);
+            br.AssertInt64(0);
+            br.AssertVarint(Format == TAEFormat.DS1 ? 0x98 : 0xB0);
+            
+            long skeletonNameOffset = br.ReadVarint();
+            long sibNameOffset = br.ReadVarint();
+
+            if (Format != TAEFormat.SOTFS)
+            {
+                br.AssertVarint(0);
+                br.AssertVarint(0);
+            }
+
+            SkeletonName = br.GetUTF16(skeletonNameOffset);
+            SibName = br.GetUTF16(sibNameOffset);
+
+            br.StepIn(animsOffset);
+            {
+                Animations = new List<Animation>(animCount);
+                bool previousAnimNeedsParamGen = false;
+                long previousAnimParamStart = 0;
+                for (int i = 0; i < animCount; i++)
+                {
+                    Animations.Add(new Animation(br, Format, 
+                        out bool lastEventNeedsParamGen, 
+                        out long animFileOffset, out long lastEventParamOffset));
+
+                    if (previousAnimNeedsParamGen)
+                    {
+                        br.StepIn(previousAnimParamStart);
+                        Animations[i - 1].Events[Animations[i - 1].Events.Count - 1].ReadParameters(br, (int)(animFileOffset - previousAnimParamStart));
+                        br.StepOut();
+                    }
+
+                    previousAnimNeedsParamGen = lastEventNeedsParamGen;
+                    previousAnimParamStart = lastEventParamOffset;
+                }
+            }
+            br.StepOut();
+
+            // Don't bother reading anim groups.
+        }
+
+        internal override void Write(BinaryWriterEx bw)
+        {
+
+            bw.WriteASCII("TAE ");
+
+            bw.BigEndian = BigEndian;
+
+            bw.WriteBoolean(BigEndian);
+            bw.WriteByte(0);
+            bw.WriteByte(0);
+
+            if (Format == TAEFormat.DS1)
+            {
+                bw.Varint64Bit = false;
+                bw.WriteByte(0);
+            }
+            else
+            {
+                bw.Varint64Bit = true;
+                bw.WriteByte(0xFF);
+            }
+
+            if (Format == TAEFormat.DS1)
+                bw.WriteInt32(0x1000B);
+            else if (Format == TAEFormat.DS3 || Format == TAEFormat.SOTFS)
+                bw.WriteInt32(0x1000C);
+            else if (Format == TAEFormat.SDT)
+                bw.WriteInt32(0x1000D);
+
+            bw.ReserveInt32("FileSize");
+            bw.WriteVarint(0x40);
+            bw.WriteVarint(1);
+            bw.WriteVarint(0x50);
+            bw.WriteVarint(Format == TAEFormat.DS1 ? 0x70 : 0x80);
+            bw.WriteVarint(Unk30);
+            bw.WriteVarint(0);
+
+            //DeS also
+            if (Format == TAEFormat.DS1)
+            {
+                bw.WriteInt64(0);
+                bw.WriteInt64(0);
+            }
+
+            bw.WriteBytes(Flags);
+
+            if (Format == TAEFormat.SOTFS)
+            {
+                bw.WriteByte(0);
+                bw.WriteByte(1);
+            }
+            else
+            {
+                bw.WriteByte(1);
+                bw.WriteByte(0);
+            }
+
+            for (int i = 0; i < 6; i++)
+                bw.WriteByte(0);
+
+            bw.WriteInt32(ID);
+            bw.WriteInt32(Animations.Count);
+            bw.ReserveVarint("AnimsOffset");
+            bw.ReserveVarint("AnimGroupsOffset");
+            bw.WriteVarint(Format == TAEFormat.DS1 ? 0x90 : 0xA0);
+            bw.WriteVarint(Animations.Count);
+            bw.ReserveVarint("FirstAnimOffset");
+            if (Format == TAEFormat.DS1)
+                bw.WriteInt32(0);
+            bw.WriteVarint(1);
+            bw.WriteVarint(Format == TAEFormat.DS1 ? 0x80 : 0x90);
+            if (Format == TAEFormat.DS1)
+                bw.WriteInt64(0);
+            bw.WriteInt32(ID);
+            bw.WriteInt32(ID);
+            bw.WriteVarint(0x50);
+            bw.WriteInt64(0);
+            bw.WriteVarint(Format == TAEFormat.DS1 ? 0x98 : 0xB0);
+            bw.ReserveVarint("SkeletonName");
+            bw.ReserveVarint("SibName");
+
+            if (Format != TAEFormat.SOTFS)
+            {
+                bw.WriteVarint(0);
+                bw.WriteVarint(0);
+            }
+
+            bw.FillVarint("SkeletonName", bw.Position);
+            bw.WriteUTF16(SkeletonName, true);
+            bw.Pad(0x10);
+
+            bw.FillVarint("SibName", bw.Position);
+            bw.WriteUTF16(SibName, true);
+            bw.Pad(0x10);
+
+            Animations.Sort((a1, a2) => a1.ID.CompareTo(a2.ID));
+
+            var animOffsets = new List<long>(Animations.Count);
+            if (Animations.Count == 0)
+            {
+                bw.FillVarint("AnimsOffset", 0);
+            }
+            else
+            {
+                bw.FillVarint("AnimsOffset", bw.Position);
+                for (int i = 0; i < Animations.Count; i++)
+                {
+                    animOffsets.Add(bw.Position);
+                    Animations[i].WriteHeader(bw, i);
+                }
+            }
+
+            bw.FillVarint("AnimGroupsOffset", bw.Position);
+            bw.ReserveVarint("AnimGroupsCount");
+            bw.ReserveVarint("AnimGroupsOffset");
+            int groupCount = 0;
+            long groupStart = bw.Position;
+            for (int i = 0; i < Animations.Count; i++)
+            {
+                int firstIndex = i;
+                bw.WriteInt32((int)Animations[i].ID);
+                while (i < Animations.Count - 1 && Animations[i + 1].ID == Animations[i].ID + 1)
+                    i++;
+                bw.WriteInt32((int)Animations[i].ID);
+                bw.WriteVarint(animOffsets[firstIndex]);
+                groupCount++;
+            }
+            bw.FillVarint("AnimGroupsCount", groupCount);
+            if (groupCount == 0)
+                bw.FillVarint("AnimGroupsOffset", 0);
+            else
+                bw.FillVarint("AnimGroupsOffset", groupStart);
+
+            if (Animations.Count == 0)
+            {
+                bw.FillVarint("FirstAnimOffset", 0);
+            }
+            else
+            {
+                bw.FillVarint("FirstAnimOffset", bw.Position);
+                for (int i = 0; i < Animations.Count; i++)
+                    Animations[i].WriteBody(bw, i, Format);
+            }
+
+            for (int i = 0; i < Animations.Count; i++)
+            {
+                Animation anim = Animations[i];
+                anim.WriteAnimFile(bw, i, Format);
+                Dictionary<float, long> timeOffsets = anim.WriteTimes(bw, i);
+                List<long> eventHeaderOffsets = anim.WriteEventHeaders(bw, i, timeOffsets);
+                anim.WriteEventData(bw, i, Format);
+                anim.WriteEventGroupHeaders(bw, i, Format);
+                anim.WriteEventGroupData(bw, i, eventHeaderOffsets, Format);
+            }
+
+            bw.FillInt32("FileSize", (int)bw.Position);
+        }
+
+        /// <summary>
+        /// Controls an individual animation.
+        /// </summary>
+        public class Animation
+        {
+            /// <summary>
+            /// ID number of this animation.
+            /// </summary>
+            public long ID;
+
+            /// <summary>
+            /// Timed events in this animation.
+            /// </summary>
+            public List<Event> Events;
+
+            /// <summary>
+            /// Unknown groups of events.
+            /// </summary>
+            public List<EventGroup> EventGroups;
+
+            /// <summary>
+            /// Unknown.
+            /// </summary>
+            public bool AnimFileReference;
+
+            ///// <summary>
+            ///// ID of animation to reference when AnimFileReference == true.
+            ///// </summary>
+            //public int ReferenceID;
+
+            ///// <summary>
+            ///// Unknown functionality. Likely only relevant if AnimFileReference == true.
+            ///// </summary>
+            //public bool UnkReferenceFlag1;
+
+            ///// <summary>
+            ///// Name retrieved from debug menu. Only relevant if AnimFileReference == true.
+            ///// </summary>
+            //public bool ReferenceIsTAEOnly;
+
+            ///// <summary>
+            ///// Name retrieved from debug menu.  Only relevant if AnimFileReference == true.
+            ///// </summary>
+            //public bool ReferenceIsHKXOnly;
+
+            ///// <summary>
+            ///// Makes the animation loop by default. Only relevant for animations not controlled by
+            ///// ESD or HKS such as ObjAct animations.
+            ///// </summary>
+            //public bool LoopByDefault;
+
+            /// <summary>
+            /// Unknown
+            /// </summary>
+            public int Unknown1;
+
+            /// <summary>
+            /// Unknown
+            /// </summary>
+            public int Unknown2;
+
+            /// <summary>
+            /// Unknown.
+            /// </summary>
+            public string AnimFileName;
+
+            internal Animation(BinaryReaderEx br, TAEFormat format, 
+                out bool lastEventNeedsParamGen, out long animFileOffset, 
+                out long lastEventParamOffset)
+            {
+                lastEventNeedsParamGen = false;
+                lastEventParamOffset = 0;
+                ID = br.ReadVarint();
+                long offset = br.ReadVarint();
+                br.StepIn(offset);
+                {
+                    int eventCount;
+                    long eventHeadersOffset;
+                    int eventGroupCount;
+                    long eventGroupsOffset;
+
+                    if (format == TAEFormat.DS1)
+                    {
+                        eventCount = br.ReadInt32();
+                        eventHeadersOffset = br.ReadVarint();
+                        eventGroupCount = br.ReadInt32();
+                        eventGroupsOffset = br.ReadVarint();
+                        br.ReadInt32(); // Times count
+                        br.ReadVarint(); // Times offset
+                        animFileOffset = br.ReadVarint();
+
+                        //For DeS assert 5 int32 == 0 here
+                    }
+                    else
+                    {
+                        eventHeadersOffset = br.ReadVarint();
+                        eventGroupsOffset = br.ReadVarint();
+                        br.ReadVarint(); // Times offset
+                        animFileOffset = br.ReadVarint();
+                        eventCount = br.ReadInt32();
+                        eventGroupCount = br.ReadInt32();
+                        br.ReadInt32(); // Times count
+                        br.AssertInt32(0);
+                    }
+
+                    var eventHeaderOffsets = new List<long>(eventCount);
+                    var eventParameterOffsets = new List<long>(eventCount);
+                    Events = new List<Event>(eventCount);
+                    br.StepIn(eventHeadersOffset);
+                    {
+                        for (int i = 0; i < eventCount; i++)
+                        {
+                            eventHeaderOffsets.Add(br.Position);
+                            Events.Add(Event.Read(br, out long pOffset, format));
+                            eventParameterOffsets.Add(pOffset);
+
+                            if (i > 0)
+                            {
+                                //  Go to previous event's parameters
+                                br.StepIn(eventParameterOffsets[i - 1]);
+                                {
+                                    // Read the space between the previous event's parameter start and the start of this event data.
+                                    Events[i - 1].ReadParameters(br, (int)(eventParameterOffsets[i] - eventParameterOffsets[i - 1]));
+                                }
+                                br.StepOut();
+                            }
+                        }
+                    }
+                    br.StepOut();
+
+                    if (eventCount > 0)
+                    {
+                        if (eventGroupsOffset == 0)
+                        {
+                            lastEventNeedsParamGen = true;
+                            lastEventParamOffset = eventParameterOffsets[eventCount - 1];
+                        }
+                        else
+                        {
+                            // Go to last event's parameters
+                            br.StepIn(eventParameterOffsets[eventCount - 1]);
+                            {
+                                // Read the space between the last event's parameter start and the start of the event groups.
+                                Events[eventCount - 1].ReadParameters(br, (int)(eventGroupsOffset - eventParameterOffsets[eventCount - 1]));
+                            }
+                            br.StepOut();
+                        }
+                    }
+
+                    EventGroups = new List<EventGroup>(eventGroupCount);
+                    br.StepIn(eventGroupsOffset);
+                    {
+                        for (int i = 0; i < eventGroupCount; i++)
+                            EventGroups.Add(new EventGroup(br, eventHeaderOffsets, format));
+                    }
+                    br.StepOut();
+
+                    br.StepIn(animFileOffset);
+                    {
+                        AnimFileReference = br.AssertVarint(0, 1) == 1;
+                        br.AssertVarint(br.Position + (br.Varint64Bit ? 8 : 4));
+                        long animFileNameOffset = br.ReadVarint();
+
+                        //if (AnimFileReference)
+                        //{
+                        //    ReferenceID = br.ReadInt32();
+
+                        //    UnkReferenceFlag1 = br.ReadBoolean();
+                        //    ReferenceIsTAEOnly = br.ReadBoolean();
+                        //    ReferenceIsHKXOnly = br.ReadBoolean();
+                        //    LoopByDefault = br.ReadBoolean();
+                        //}
+                        //else
+                        //{
+                        //    UnkReferenceFlag1 = br.ReadBoolean();
+                        //    ReferenceIsTAEOnly = br.ReadBoolean();
+                        //    ReferenceIsHKXOnly = br.ReadBoolean();
+                        //    LoopByDefault = br.ReadBoolean();
+
+                        //    ReferenceID = br.ReadInt32();
+                        //}
+
+                        Unknown1 = br.ReadInt32();
+                        Unknown2 = br.ReadInt32();
+
+                        if (format != TAEFormat.DS1)
+                        {
+                            br.AssertVarint(0);
+                            br.AssertVarint(0);
+                        }
+                        else if (format == TAEFormat.DS1 && AnimFileReference)
+                        {
+                            br.AssertVarint(0);
+                        }
+
+                        if (animFileNameOffset < br.Length)
+                            AnimFileName = br.GetUTF16(animFileNameOffset);
+                        else
+                            AnimFileName = "";
+                        // When Reference is false, there's always a filename.
+                        // When true, there's usually not, but sometimes there is, and I cannot figure out why.
+                        // Thus, this stupid hack to achieve byte-perfection.
+                        if (!(AnimFileName.EndsWith(".hkt") || AnimFileName.EndsWith(".hkx")))
+                            AnimFileName = "";
+
+                    }
+                    br.StepOut();
+                }
+                br.StepOut();
+            }
+
+            internal void WriteHeader(BinaryWriterEx bw, int i)
+            {
+                bw.WriteVarint(ID);
+                bw.ReserveVarint($"AnimationOffset{i}");
+            }
+
+            internal void WriteBody(BinaryWriterEx bw, int i, TAEFormat format)
+            {
+                bw.FillVarint($"AnimationOffset{i}", bw.Position);
+
+                if (format == TAEFormat.DS1)
+                {
+                    bw.WriteInt32(Events.Count);
+                    bw.ReserveVarint($"EventHeadersOffset{i}");
+                    bw.WriteInt32(EventGroups.Count);
+                    bw.ReserveVarint($"EventGroupHeadersOffset{i}");
+                    bw.ReserveInt32($"TimesCount{i}");
+                    bw.ReserveVarint($"TimesOffset{i}");
+                    bw.ReserveVarint($"AnimFileOffset{i}");
+                    //For DeS write 5 int32 == 0
+                }
+                else
+                {
+                    bw.ReserveVarint($"EventHeadersOffset{i}");
+                    bw.ReserveVarint($"EventGroupHeadersOffset{i}");
+                    bw.ReserveVarint($"TimesOffset{i}");
+                    bw.ReserveVarint($"AnimFileOffset{i}");
+                    bw.WriteInt32(Events.Count);
+                    bw.WriteInt32(EventGroups.Count);
+                    bw.ReserveInt32($"TimesCount{i}");
+                    bw.WriteInt32(0);
+                }
+            }
+
+            internal void WriteAnimFile(BinaryWriterEx bw, int i, TAEFormat format)
+            {
+                bw.FillVarint($"AnimFileOffset{i}", bw.Position);
+                bw.WriteVarint(AnimFileReference ? 1 : 0);
+                bw.WriteVarint(bw.Position + 8);
+                bw.ReserveVarint("AnimFileNameOffset");
+
+                //if (AnimFileReference)
+                //{
+                //    bw.WriteInt32(ReferenceID);
+
+                //    bw.WriteBoolean(UnkReferenceFlag1);
+                //    bw.WriteBoolean(ReferenceIsTAEOnly);
+                //    bw.WriteBoolean(ReferenceIsHKXOnly);
+                //    bw.WriteBoolean(LoopByDefault);
+                //}
+                //else
+                //{
+                //    bw.WriteBoolean(UnkReferenceFlag1);
+                //    bw.WriteBoolean(ReferenceIsTAEOnly);
+                //    bw.WriteBoolean(ReferenceIsHKXOnly);
+                //    bw.WriteBoolean(LoopByDefault);
+
+                //    bw.WriteInt32(ReferenceID);
+                //}
+
+                bw.WriteInt32(Unknown1);
+                bw.WriteInt32(Unknown2);
+
+                bw.WriteVarint(0);
+                bw.WriteVarint(0);
+
+                if (format == TAEFormat.DS1 && AnimFileReference)
+                    bw.WriteVarint(0);
+
+                bw.FillVarint("AnimFileNameOffset", bw.Position);
+                if (AnimFileName != "")
+                {
+                    bw.WriteUTF16(AnimFileName, true);
+                    bw.Pad(0x10);
+                }
+            }
+
+            internal Dictionary<float, long> WriteTimes(BinaryWriterEx bw, int animIndex)
+            {
+                var times = new SortedSet<float>();
+                foreach (Event evt in Events)
+                {
+                    times.Add(evt.StartTime);
+                    times.Add(evt.EndTime);
+                }
+                bw.FillInt32($"TimesCount{animIndex}", times.Count);
+
+                if (times.Count == 0)
+                    bw.FillVarint($"TimesOffset{animIndex}", 0);
+                else
+                    bw.FillVarint($"TimesOffset{animIndex}", bw.Position);
+
+                var timeOffsets = new Dictionary<float, long>();
+                foreach (float time in times)
+                {
+                    timeOffsets[time] = bw.Position;
+                    bw.WriteSingle(time);
+                }
+                bw.Pad(0x10);
+
+                return timeOffsets;
+            }
+
+            internal List<long> WriteEventHeaders(BinaryWriterEx bw, int animIndex, Dictionary<float, long> timeOffsets)
+            {
+                var eventHeaderOffsets = new List<long>(Events.Count);
+                if (Events.Count > 0)
+                {
+                    bw.FillVarint($"EventHeadersOffset{animIndex}", bw.Position);
+                    for (int i = 0; i < Events.Count; i++)
+                    {
+                        eventHeaderOffsets.Add(bw.Position);
+                        Events[i].WriteHeader(bw, animIndex, i, timeOffsets);
+                    }
+                }
+                else
+                {
+                    bw.FillVarint($"EventHeadersOffset{animIndex}", 0);
+                }
+                return eventHeaderOffsets;
+            }
+
+            internal void WriteEventData(BinaryWriterEx bw, int i, TAEFormat format)
+            {
+                for (int j = 0; j < Events.Count; j++)
+                    Events[j].WriteData(bw, i, j, format);
+            }
+
+            internal void WriteEventGroupHeaders(BinaryWriterEx bw, int i, TAEFormat format)
+            {
+                if (EventGroups.Count > 0)
+                {
+                    bw.FillVarint($"EventGroupHeadersOffset{i}", bw.Position);
+                    for (int j = 0; j < EventGroups.Count; j++)
+                        EventGroups[j].WriteHeader(bw, i, j, format);
+                }
+                else
+                {
+                    bw.FillVarint($"EventGroupHeadersOffset{i}", 0);
+                }
+            }
+
+            internal void WriteEventGroupData(BinaryWriterEx bw, int i, List<long> eventHeaderOffsets, TAEFormat format)
+            {
+                for (int j = 0; j < EventGroups.Count; j++)
+                    EventGroups[j].WriteData(bw, i, j, eventHeaderOffsets, format);
+            }
+        }
+
+        /// <summary>
+        /// A group of events in an animation with an associated EventType that does not necessarily match theirs.
+        /// </summary>
+        public class EventGroup
+        {
+            /// <summary>
+            /// Unknown.
+            /// </summary>
+            public long EventType;
+
+            /// <summary>
+            /// Indices of events in this group in the parent animation's collection.
+            /// </summary>
+            public List<int> Indices;
+
+            /// <summary>
+            /// Creates a new empty EventGroup with the given type.
+            /// </summary>
+            public EventGroup(long eventType)
+            {
+                EventType = eventType;
+                Indices = new List<int>();
+            }
+
+            internal EventGroup(BinaryReaderEx br, List<long> eventHeaderOffsets, TAEFormat format)
+            {
+                long entryCount = br.ReadVarint();
+                long valuesOffset = br.ReadVarint();
+                long typeOffset = br.ReadVarint();
+                if (format != TAEFormat.DS1)
+                    br.AssertVarint(0);
+
+                br.StepIn(typeOffset);
+                {
+                    EventType = br.ReadVarint();
+                    if (format == TAEFormat.SOTFS)
+                    {
+                        br.AssertVarint(br.Position + (br.Varint64Bit ? 8 : 4));
+                        br.AssertVarint(0);
+                        br.AssertVarint(0);
+                    }
+                    else if (format != TAEFormat.DS1)
+                    {
+                        br.AssertVarint(0);
+                    }
+                }
+                br.StepOut();
+
+                br.StepIn(valuesOffset);
+                {
+                    Indices = br.ReadInt32s((int)entryCount).Select(offset => eventHeaderOffsets.FindIndex(headerOffset => headerOffset == offset)).ToList();
+                }
+                br.StepOut();
+            }
+
+            internal void WriteHeader(BinaryWriterEx bw, int i, int j, TAEFormat format)
+            {
+                bw.WriteVarint(Indices.Count);
+                bw.ReserveVarint($"EventGroupValuesOffset{i}:{j}");
+                bw.ReserveVarint($"EventGroupTypeOffset{i}:{j}");
+                if (format != TAEFormat.DS1)
+                    bw.WriteVarint(0);
+            }
+
+            internal void WriteData(BinaryWriterEx bw, int i, int j, List<long> eventHeaderOffsets, TAEFormat format)
+            {
+                bw.FillVarint($"EventGroupTypeOffset{i}:{j}", bw.Position);
+                bw.WriteVarint(EventType);
+
+                if (format != TAEFormat.DS1)
+                    bw.WriteVarint(0);
+
+                bw.FillVarint($"EventGroupValuesOffset{i}:{j}", bw.Position);
+                for (int k = 0; k < Indices.Count; k++)
+                    bw.WriteInt32((int)eventHeaderOffsets[Indices[k]]);
+                bw.Pad(0x10);
+            }
+        }
+
+        /// <summary>
+        /// An action or effect triggered at a certain time during an animation.
+        /// </summary>
+        public class Event
+        {
+            /// <summary>
+            /// The type of this event.
+            /// </summary>
+            public long Type { get; private set; }
+
+            /// <summary>
+            /// When the event begins.
+            /// </summary>
+            public float StartTime;
+
+            /// <summary>
+            /// When the event ends.
+            /// </summary>
+            public float EndTime;
+
+            /// <summary>
+            /// Raw parameters bytes.
+            /// </summary>
+            public byte[] Parameters;
+
+            internal Event(float startTime, float endTime)
+            {
+                StartTime = startTime;
+                EndTime = endTime;
+            }
+
+            internal void WriteHeader(BinaryWriterEx bw, int animIndex, int eventIndex, Dictionary<float, long> timeOffsets)
+            {
+                bw.WriteVarint(timeOffsets[StartTime]);
+                bw.WriteVarint(timeOffsets[EndTime]);
+                bw.ReserveVarint($"EventDataOffset{animIndex}:{eventIndex}");
+            }
+
+            internal void WriteData(BinaryWriterEx bw, int animIndex, int eventIndex, TAEFormat format)
+            {
+                bw.FillVarint($"EventDataOffset{animIndex}:{eventIndex}", bw.Position);
+                bw.WriteVarint(Type);
+
+                if (format == TAEFormat.SDT && Parameters.Length == 0)
+                    bw.WriteVarint(0);
+                else
+                    bw.WriteVarint(bw.Position + (bw.Varint64Bit ? 8 : 4));
+
+                if (Parameters.Length > 0)
+                    bw.WriteBytes(Parameters);
+
+                bw.Pad(0x10);
+            }
+
+            internal void ReadParameters(BinaryReaderEx br, int byteCount)
+            {
+                Parameters = br.ReadBytes(byteCount);
+            }
+
+            /// <summary>
+            /// Returns the start time, end time, and type of the event.
+            /// </summary>
+            public override string ToString()
+            {
+                return $"{(int)Math.Round(StartTime * 30):D3} - {(int)Math.Round(EndTime * 30):D3} {Type}";
+            }
+
+            internal static Event Read(BinaryReaderEx br, out long parametersOffset, TAEFormat format)
+            {
+                long startTimeOffset = br.ReadVarint();
+                long endTimeOffset = br.ReadVarint();
+                long eventDataOffset = br.ReadVarint();
+                float startTime = br.GetSingle(startTimeOffset);
+                float endTime = br.GetSingle(endTimeOffset);
+
+                Event result = new Event(startTime, endTime);
+                br.StepIn(eventDataOffset);
+                {
+                    result.Type = br.ReadVarint();
+                    //if (format == TAEFormat.SDT)
+                    //{
+                    //    // offset will be 0 in sekiro if no parameters
+                    //    br.AssertVarint(br.Position + (br.Varint64Bit ? 8 : 4), 0);
+                    //    parametersOffset = br.Position;
+                    //}
+                    //else
+                    //{
+                    //    parametersOffset = br.AssertVarint(br.Position + (br.Varint64Bit ? 8 : 4));
+                    //}
+                    br.AssertVarint(br.Position + (br.Varint64Bit ? 8 : 4), 0);
+                    parametersOffset = br.Position;
+                }
+                br.StepOut();
+
+                return result;
+            }
+        }
+    }
+}

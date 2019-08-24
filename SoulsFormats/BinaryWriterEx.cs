@@ -27,6 +27,11 @@ namespace SoulsFormats
         public bool BigEndian { get; set; }
 
         /// <summary>
+        /// Sets whether Varint-related methods will use 64-bit ints rather than 32-bit ones.
+        /// </summary>
+        public bool Varint64Bit { get; set; }
+
+        /// <summary>
         /// The underlying stream.
         /// </summary>
         public Stream Stream { get; private set; }
@@ -456,6 +461,56 @@ namespace SoulsFormats
         {
             StepIn(Fill(name, "Int64"));
             WriteInt64(value);
+            StepOut();
+        }
+        #endregion
+
+        #region Varint
+        /// <summary>
+        /// Writes either a four-byte or an eight-byte signed integer.
+        /// </summary>
+        public void WriteVarint(long value)
+        {
+            if (Varint64Bit)
+            {
+                if (BigEndian)
+                    WriteReversedBytes(BitConverter.GetBytes(value));
+                else
+                    bw.Write(value);
+            }
+            else
+            {
+                if (BigEndian)
+                    WriteReversedBytes(BitConverter.GetBytes((int)value));
+                else
+                    bw.Write((int)value);
+            }
+        }
+
+        /// <summary>
+        /// Writes an array of either four-byte or eight-byte signed integers.
+        /// </summary>
+        public void WriteVarints(IList<long> values)
+        {
+            foreach (long value in values)
+                WriteVarint(value);
+        }
+
+        /// <summary>
+        /// Reserves the current position and advances the stream by eight bytes.
+        /// </summary>
+        public void ReserveVarint(string name)
+        {
+            Reserve(name, Varint64Bit ? "Varint64" : "Varint32", Varint64Bit ? 8 : 4);
+        }
+
+        /// <summary>
+        /// Writes an eight-byte signed integer to a reserved position.
+        /// </summary>
+        public void FillVarint(string name, long value)
+        {
+            StepIn(Fill(name, Varint64Bit ? "Varint64" : "Varint32"));
+            WriteVarint(value);
             StepOut();
         }
         #endregion
