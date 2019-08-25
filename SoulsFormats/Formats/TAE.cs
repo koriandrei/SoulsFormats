@@ -316,7 +316,7 @@ namespace SoulsFormats
             }
 
             bw.FillVarint("SkeletonName", bw.Position);
-            if (Format != TAEFormat.SOTFS)
+            if (!string.IsNullOrEmpty(SkeletonName))
             {
                 bw.WriteUTF16(SkeletonName, true);
                 if (Format != TAEFormat.DS1)
@@ -324,7 +324,7 @@ namespace SoulsFormats
             }
 
             bw.FillVarint("SibName", bw.Position);
-            if (Format != TAEFormat.SOTFS)
+            if (!string.IsNullOrEmpty(SibName))
             {
                 bw.WriteUTF16(SibName, true);
                 if (Format != TAEFormat.DS1)
