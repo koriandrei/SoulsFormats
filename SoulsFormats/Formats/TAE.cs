@@ -186,8 +186,11 @@ namespace SoulsFormats
                 br.AssertVarint(0);
             }
 
-            SkeletonName = br.GetUTF16(skeletonNameOffset);
-            SibName = br.GetUTF16(sibNameOffset);
+            if (Format != TAEFormat.SOTFS)
+            {
+                SkeletonName = br.GetUTF16(skeletonNameOffset);
+                SibName = br.GetUTF16(sibNameOffset);
+            }
 
             br.StepIn(animsOffset);
             {
@@ -304,12 +307,18 @@ namespace SoulsFormats
             }
 
             bw.FillVarint("SkeletonName", bw.Position);
-            bw.WriteUTF16(SkeletonName, true);
-            bw.Pad(0x10);
+            if (Format != TAEFormat.SOTFS)
+            {
+                bw.WriteUTF16(SkeletonName, true);
+                bw.Pad(0x10);
+            }
 
             bw.FillVarint("SibName", bw.Position);
-            bw.WriteUTF16(SibName, true);
-            bw.Pad(0x10);
+            if (Format != TAEFormat.SOTFS)
+            {
+                bw.WriteUTF16(SibName, true);
+                bw.Pad(0x10);
+            }
 
             Animations.Sort((a1, a2) => a1.ID.CompareTo(a2.ID));
 
@@ -496,7 +505,9 @@ namespace SoulsFormats
                                 br.StepIn(eventParameterOffsets[i - 1]);
                                 {
                                     // Read the space between the previous event's parameter start and the start of this event data.
-                                    Events[i - 1].ReadParameters(br, (int)(eventParameterOffsets[i] - eventParameterOffsets[i - 1]));
+                                    long gapBetweenEventParamOffsets = eventParameterOffsets[i] - eventParameterOffsets[i - 1];
+                                    // Subtract to account for the current event's type and offset 
+                                    Events[i - 1].ReadParameters(br, (int)(gapBetweenEventParamOffsets - (br.Varint64Bit ? 16 : 8)));
                                 }
                                 br.StepOut();
                             }
@@ -576,7 +587,7 @@ namespace SoulsFormats
                         // When Reference is false, there's always a filename.
                         // When true, there's usually not, but sometimes there is, and I cannot figure out why.
                         // Thus, this stupid hack to achieve byte-perfection.
-                        if (!(AnimFileName.EndsWith(".hkt") || AnimFileName.EndsWith(".hkx")))
+                        if (!(AnimFileName.EndsWith(".hkt") || AnimFileName.EndsWith(".hkx") || AnimFileName.EndsWith(".sib")))
                             AnimFileName = "";
 
                     }
@@ -784,7 +795,12 @@ namespace SoulsFormats
 
                 br.StepIn(valuesOffset);
                 {
-                    Indices = br.ReadInt32s((int)entryCount).Select(offset => eventHeaderOffsets.FindIndex(headerOffset => headerOffset == offset)).ToList();
+                    if (format == TAEFormat.SOTFS)
+                        Indices = br.ReadVarints((int)entryCount).Select(offset 
+                            => eventHeaderOffsets.FindIndex(headerOffset => headerOffset == offset)).ToList();
+                    else
+                        Indices = br.ReadInt32s((int)entryCount).Select(offset 
+                            => eventHeaderOffsets.FindIndex(headerOffset => headerOffset == offset)).ToList();
                 }
                 br.StepOut();
             }
@@ -803,12 +819,25 @@ namespace SoulsFormats
                 bw.FillVarint($"EventGroupTypeOffset{i}:{j}", bw.Position);
                 bw.WriteVarint(EventType);
 
-                if (format != TAEFormat.DS1)
+                if (format == TAEFormat.SOTFS)
+                {
+                    bw.WriteVarint(bw.Position + (bw.Varint64Bit ? 8 : 4));
                     bw.WriteVarint(0);
+                    bw.WriteVarint(0);
+                }
+                else if (format != TAEFormat.DS1)
+                {
+                    bw.WriteVarint(0);
+                }
 
                 bw.FillVarint($"EventGroupValuesOffset{i}:{j}", bw.Position);
                 for (int k = 0; k < Indices.Count; k++)
-                    bw.WriteInt32((int)eventHeaderOffsets[Indices[k]]);
+                {
+                    if (format == TAEFormat.SOTFS)
+                        bw.WriteVarint(eventHeaderOffsets[Indices[k]]);
+                    else
+                        bw.WriteInt32((int)eventHeaderOffsets[Indices[k]]);
+                }
                 bw.Pad(0x10);
             }
         }
@@ -821,7 +850,13 @@ namespace SoulsFormats
             /// <summary>
             /// The type of this event.
             /// </summary>
-            public long Type { get; private set; }
+            public int Type { get; private set; }
+
+            /// <summary>
+            /// An unknown 32-bit integer following the event type.
+            /// So far confirmed to be used in SOTFS and SDT
+            /// </summary>
+            public int Unk04 { get; private set; }
 
             /// <summary>
             /// When the event begins.
@@ -854,7 +889,10 @@ namespace SoulsFormats
             internal void WriteData(BinaryWriterEx bw, int animIndex, int eventIndex, TAEFormat format)
             {
                 bw.FillVarint($"EventDataOffset{animIndex}:{eventIndex}", bw.Position);
-                bw.WriteVarint(Type);
+                bw.WriteInt32(Type);
+
+                if (format != TAEFormat.DS1)
+                    bw.WriteInt32(Unk04);
 
                 if (format == TAEFormat.SDT && Parameters.Length == 0)
                     bw.WriteVarint(0);
@@ -891,7 +929,11 @@ namespace SoulsFormats
                 Event result = new Event(startTime, endTime);
                 br.StepIn(eventDataOffset);
                 {
-                    result.Type = br.ReadVarint();
+                    result.Type = br.ReadInt32();
+
+                    if (format != TAEFormat.DS1)
+                        result.Unk04 = br.ReadInt32();
+
                     //if (format == TAEFormat.SDT)
                     //{
                     //    // offset will be 0 in sekiro if no parameters
