@@ -603,8 +603,11 @@ namespace SoulsFormats
                         // When true, there's usually not, but sometimes there is, and I cannot figure out why.
                         // Thus, this stupid hack to achieve byte-perfection.
                         var animNameCheck = AnimFileName.ToLower();
-                        if (!(animNameCheck.EndsWith(".hkt") || animNameCheck.EndsWith(".hkx") 
-                            || animNameCheck.EndsWith(".sib") || animNameCheck.EndsWith(".hkxwin")))
+                        if (!(animNameCheck.EndsWith(".hkt") 
+                            || (format == TAEFormat.SDT && animNameCheck.EndsWith("hkt")) 
+                            || animNameCheck.EndsWith(".hkx") 
+                            || animNameCheck.EndsWith(".sib") 
+                            || animNameCheck.EndsWith(".hkxwin")))
                             AnimFileName = "";
 
                     }
@@ -926,13 +929,17 @@ namespace SoulsFormats
                 if (format != TAEFormat.DS1)
                     bw.WriteInt32(Unk04);
 
-                if (format == TAEFormat.SDT && Parameters.Length == 0)
+                if (Parameters == null)
+                {
                     bw.WriteVarint(0);
+                }
                 else
+                {
                     bw.WriteVarint(bw.Position + (bw.Varint64Bit ? 8 : 4));
 
-                if (Parameters.Length > 0)
-                    bw.WriteBytes(Parameters);
+                    if (Parameters.Length > 0)
+                        bw.WriteBytes(Parameters);
+                }
 
                 if (format != TAEFormat.DS1)
                     bw.Pad(0x10);
@@ -940,7 +947,8 @@ namespace SoulsFormats
 
             internal void ReadParameters(BinaryReaderEx br, int byteCount)
             {
-                Parameters = br.ReadBytes(byteCount);
+                if (Parameters != null || byteCount > 0)
+                    Parameters = br.ReadBytes(byteCount);
             }
 
             /// <summary>
@@ -977,8 +985,12 @@ namespace SoulsFormats
                     //{
                     //    parametersOffset = br.AssertVarint(br.Position + (br.Varint64Bit ? 8 : 4));
                     //}
-                    br.AssertVarint(br.Position + (br.Varint64Bit ? 8 : 4), 0);
+                    var nullCheck = br.AssertVarint(br.Position + (br.Varint64Bit ? 8 : 4), 0);
                     parametersOffset = br.Position;
+                    if (nullCheck != 0)
+                    {
+                        result.Parameters = new byte[0];
+                    }
                 }
                 br.StepOut();
 
