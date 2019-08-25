@@ -213,6 +213,14 @@ namespace SoulsFormats
                     previousAnimNeedsParamGen = lastEventNeedsParamGen;
                     previousAnimParamStart = lastEventParamOffset;
                 }
+
+                // Read from very last anim's very last event's parameters offset to end of file lul
+                if (previousAnimNeedsParamGen)
+                {
+                    br.StepIn(previousAnimParamStart);
+                    Animations[Animations.Count - 1].Events[Animations[Animations.Count - 1].Events.Count - 1].ReadParameters(br, (int)(br.Length - previousAnimParamStart));
+                    br.StepOut();
+                }
             }
             br.StepOut();
 
@@ -259,6 +267,7 @@ namespace SoulsFormats
             //DeS also
             if (Format == TAEFormat.DS1)
             {
+                bw.WriteInt64(0);
                 bw.WriteInt64(0);
                 bw.WriteInt64(0);
             }
@@ -310,14 +319,16 @@ namespace SoulsFormats
             if (Format != TAEFormat.SOTFS)
             {
                 bw.WriteUTF16(SkeletonName, true);
-                bw.Pad(0x10);
+                if (Format != TAEFormat.DS1)
+                    bw.Pad(0x10);
             }
 
             bw.FillVarint("SibName", bw.Position);
             if (Format != TAEFormat.SOTFS)
             {
                 bw.WriteUTF16(SibName, true);
-                bw.Pad(0x10);
+                if (Format != TAEFormat.DS1)
+                    bw.Pad(0x10);
             }
 
             Animations.Sort((a1, a2) => a1.ID.CompareTo(a2.ID));
@@ -353,6 +364,7 @@ namespace SoulsFormats
                 groupCount++;
             }
             bw.FillVarint("AnimGroupsCount", groupCount);
+
             if (groupCount == 0)
                 bw.FillVarint("AnimGroupsOffset", 0);
             else
@@ -373,7 +385,7 @@ namespace SoulsFormats
             {
                 Animation anim = Animations[i];
                 anim.WriteAnimFile(bw, i, Format);
-                Dictionary<float, long> timeOffsets = anim.WriteTimes(bw, i);
+                Dictionary<float, long> timeOffsets = anim.WriteTimes(bw, i, Format);
                 List<long> eventHeaderOffsets = anim.WriteEventHeaders(bw, i, timeOffsets);
                 anim.WriteEventData(bw, i, Format);
                 anim.WriteEventGroupHeaders(bw, i, Format);
@@ -575,9 +587,12 @@ namespace SoulsFormats
                             br.AssertVarint(0);
                             br.AssertVarint(0);
                         }
-                        else if (format == TAEFormat.DS1 && AnimFileReference)
+                        else
                         {
                             br.AssertVarint(0);
+
+                            if (AnimFileReference)
+                                br.AssertVarint(0);
                         }
 
                         if (animFileNameOffset < br.Length)
@@ -587,7 +602,9 @@ namespace SoulsFormats
                         // When Reference is false, there's always a filename.
                         // When true, there's usually not, but sometimes there is, and I cannot figure out why.
                         // Thus, this stupid hack to achieve byte-perfection.
-                        if (!(AnimFileName.EndsWith(".hkt") || AnimFileName.EndsWith(".hkx") || AnimFileName.EndsWith(".sib")))
+                        var animNameCheck = AnimFileName.ToLower();
+                        if (!(animNameCheck.EndsWith(".hkt") || animNameCheck.EndsWith(".hkx") 
+                            || animNameCheck.EndsWith(".sib") || animNameCheck.EndsWith(".hkxwin")))
                             AnimFileName = "";
 
                     }
@@ -634,7 +651,7 @@ namespace SoulsFormats
             {
                 bw.FillVarint($"AnimFileOffset{i}", bw.Position);
                 bw.WriteVarint(AnimFileReference ? 1 : 0);
-                bw.WriteVarint(bw.Position + 8);
+                bw.WriteVarint(bw.Position + (bw.Varint64Bit ? 8 : 4));
                 bw.ReserveVarint("AnimFileNameOffset");
 
                 //if (AnimFileReference)
@@ -659,28 +676,39 @@ namespace SoulsFormats
                 bw.WriteInt32(Unknown1);
                 bw.WriteInt32(Unknown2);
 
-                bw.WriteVarint(0);
-                bw.WriteVarint(0);
-
-                if (format == TAEFormat.DS1 && AnimFileReference)
+                if (format != TAEFormat.DS1)
+                {
                     bw.WriteVarint(0);
+                    bw.WriteVarint(0);
+                }
+                else
+                {
+                    bw.WriteVarint(0);
+
+                    if (AnimFileReference)
+                        bw.WriteVarint(0);
+                }
 
                 bw.FillVarint("AnimFileNameOffset", bw.Position);
                 if (AnimFileName != "")
                 {
                     bw.WriteUTF16(AnimFileName, true);
-                    bw.Pad(0x10);
+
+                    if (format != TAEFormat.DS1)
+                        bw.Pad(0x10);
                 }
             }
 
-            internal Dictionary<float, long> WriteTimes(BinaryWriterEx bw, int animIndex)
+            internal Dictionary<float, long> WriteTimes(BinaryWriterEx bw, int animIndex, TAEFormat format)
             {
                 var times = new SortedSet<float>();
+
                 foreach (Event evt in Events)
                 {
                     times.Add(evt.StartTime);
                     times.Add(evt.EndTime);
                 }
+
                 bw.FillInt32($"TimesCount{animIndex}", times.Count);
 
                 if (times.Count == 0)
@@ -694,7 +722,9 @@ namespace SoulsFormats
                     timeOffsets[time] = bw.Position;
                     bw.WriteSingle(time);
                 }
-                bw.Pad(0x10);
+
+                if (format != TAEFormat.DS1)
+                    bw.Pad(0x10);
 
                 return timeOffsets;
             }
@@ -838,7 +868,9 @@ namespace SoulsFormats
                     else
                         bw.WriteInt32((int)eventHeaderOffsets[Indices[k]]);
                 }
-                bw.Pad(0x10);
+
+                if (format != TAEFormat.DS1)
+                    bw.Pad(0x10);
             }
         }
 
@@ -902,7 +934,8 @@ namespace SoulsFormats
                 if (Parameters.Length > 0)
                     bw.WriteBytes(Parameters);
 
-                bw.Pad(0x10);
+                if (format != TAEFormat.DS1)
+                    bw.Pad(0x10);
             }
 
             internal void ReadParameters(BinaryReaderEx br, int byteCount)
