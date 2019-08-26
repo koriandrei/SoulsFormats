@@ -1,13 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Xml;
 
 namespace SoulsFormats
 {
     /// <summary>
     /// Controls when different events happen during animations; this specific version is used in DS3. Extension: .tae
     /// </summary>
-    public class TAE : SoulsFile<TAE>
+    public partial class TAE : SoulsFile<TAE>
     {
         /// <summary>
         /// Which format this file is.
@@ -17,20 +18,24 @@ namespace SoulsFormats
             /// <summary>
             /// Dark Souls 1.
             /// </summary>
-            DS1,
+            DS1 = 0,
             /// <summary>
             /// Dark Souls II: Scholar of the First Sin. 
             /// Does not support 32-bit original Dark Souls II release.
             /// </summary>
-            SOTFS,
+            SOTFS = 1,
             /// <summary>
-            /// Dark Souls III and Bloodborne
+            /// Dark Souls III. Same value as Bloodborne.
             /// </summary>
-            DS3,
+            DS3 = 2,
+            /// <summary>
+            /// Bloodborne. Same value as Dark Souls III.
+            /// </summary>
+            BB = 2,
             /// <summary>
             /// Sekiro: Shadows Die Twice
             /// </summary>
-            SDT
+            SDT = 3
         }
 
         /// <summary>
@@ -70,9 +75,36 @@ namespace SoulsFormats
         public List<Animation> Animations;
 
         /// <summary>
-        /// Unknown; chr tae: 0x15; obj tae: 0x4, 0x8, 0xE, 0xF, 0x10, 0x12, 0x13, 0x14, 0x15; mov tae: 0x4.
+        /// What set of events this TAE uses. Can be different within the same game.
+        /// Often found in OBJ TAEs.
+        /// Not stored in DS1 TAE files.
         /// </summary>
-        public long Unk30;
+        public long EventBank;
+
+        /// <summary>
+        /// Applies a template to this TAE for easier editing.
+        /// After applying template, use events' .Parameters property.
+        /// </summary>
+        public void ApplyTemplate(Template template)
+        {
+            if (template.Game != Format)
+                throw new InvalidOperationException($"Template is for {template.Game} but this TAE is for {Format}.");
+
+            if (template.ContainsKey(EventBank))
+            {
+                foreach (var anim in Animations)
+                {
+                    foreach (var evt in anim.Events)
+                    {
+                        evt.ApplyTemplate(this, template);
+                    }
+                }
+            }
+            else
+            {
+                throw new InvalidOperationException($"This TAE uses event bank {EventBank} but no such bank exists in the template.");
+            }
+        }
 
         internal override bool Is(BinaryReaderEx br)
         {
@@ -133,7 +165,16 @@ namespace SoulsFormats
             else
                 br.AssertVarint(0x70);
 
-            Unk30 = br.ReadVarint();
+            if (Format == TAEFormat.DS1)
+            {
+                br.AssertInt16(2);
+                br.AssertInt16(1);
+            }
+            else
+            {
+                EventBank = br.ReadVarint();
+            }
+
             br.AssertVarint(0);
 
             if (Format == TAEFormat.DS1)
@@ -261,7 +302,17 @@ namespace SoulsFormats
             bw.WriteVarint(1);
             bw.WriteVarint(0x50);
             bw.WriteVarint(Format == TAEFormat.DS1 ? 0x70 : 0x80);
-            bw.WriteVarint(Unk30);
+
+            if (Format == TAEFormat.DS1)
+            {
+                bw.WriteInt16(2);
+                bw.WriteInt16(1);
+            }
+            else
+            {
+                bw.WriteVarint(EventBank);
+            }
+            
             bw.WriteVarint(0);
 
             //DeS also
@@ -883,6 +934,104 @@ namespace SoulsFormats
         public class Event
         {
             /// <summary>
+            /// A parameter in an event.
+            /// </summary>
+            public class ParameterContainer
+            {
+                private Dictionary<string, object> parameterValues;
+
+                /// <summary>
+                /// The template of the event for which these are the parameters.
+                /// </summary>
+                public Template.EventTemplate Template { get; private set; }
+
+                /// <summary>
+                /// Returns all parameters.
+                /// </summary>
+                public IReadOnlyDictionary<string, object> Values
+                    => parameterValues;
+
+                /// <summary>
+                /// Value of the specified parameter.
+                /// </summary>
+                public object this[string paramName]
+                {
+                    get => parameterValues[paramName];
+                    set => parameterValues[paramName] = value;
+                }
+
+                /// <summary>
+                /// Gets the value of a parameter.
+                /// </summary>
+                public object GetParamValue(string paramName)
+                {
+                    return this[paramName];
+                }
+
+                /// <summary>
+                /// Gets the value type of a parameter.
+                /// </summary>
+                public Template.ParamType GetParamValueType(string paramName)
+                {
+                    return Template[paramName].Type;
+                }
+
+                /// <summary>
+                /// Gets the whole template of a parameter.
+                /// </summary>
+                public Template.ParameterTemplate GetParamTemplate(string paramName)
+                {
+                    return Template[paramName];
+                }
+
+                internal ParameterContainer(bool bigEndian, byte[] paramData, Template.EventTemplate template)
+                {
+                    parameterValues = new Dictionary<string, object>();
+                    Template = template;
+                    using (var memStream = new System.IO.MemoryStream(paramData))
+                    {
+                        var br = new BinaryReaderEx(bigEndian, memStream);
+                        foreach (var paramKvp in Template)
+                        {
+                            var p = paramKvp.Value;
+                            if (p.ValueToAssert != null)
+                            {
+                                p.AssertValue(br);
+                            }
+                            else
+                            {
+                                parameterValues.Add(p.Name, p.ReadValue(br));
+                            }
+                        }
+                    }
+                }
+
+                internal byte[] AsBytes(bool bigEndian)
+                {
+                    using (var memStream = new System.IO.MemoryStream())
+                    {
+                        var bw = new BinaryWriterEx(bigEndian, memStream);
+
+                        foreach (var paramKvp in Template)
+                        {
+                            var p = paramKvp.Value;
+                            if (p.ValueToAssert != null)
+                            {
+                                p.WriteValue(bw, p.ValueToAssert);
+                            }
+                            else
+                            {
+                                p.WriteValue(bw, this[p.Name]);
+                            }
+
+                        }
+
+                        return memStream.ToArray();
+                    }
+                }
+            }
+
+            /// <summary>
             /// The type of this event.
             /// </summary>
             public int Type { get; private set; }
@@ -903,10 +1052,64 @@ namespace SoulsFormats
             /// </summary>
             public float EndTime;
 
+            internal byte[] ParameterBytes;
+
             /// <summary>
-            /// Raw parameters bytes.
+            /// Gets the bytes of this event's parameters. This will
+            /// properly return ready-to-save bytes if a template
+            /// is being used, otherwise it returns the bytes
+            /// read directly from the file (which may
+            /// include some padding).
             /// </summary>
-            public byte[] Parameters;
+            public byte[] GetParameterBytes(bool bigEndian)
+            {
+                if (Parameters != null)
+                    CopyParametersToBytes(bigEndian);
+                return ParameterBytes;
+            }
+
+            /// <summary>
+            /// Indexable parameter container of this event.
+            /// Use .Parameters[name] for basic value get/set
+            /// and use .GetValueType(name) to see how to convert
+            /// it to/from System.Object.
+            /// </summary>
+            public ParameterContainer Parameters { get; private set; }
+
+            /// <summary>
+            /// The EventTemplate applied to this event, if any.
+            /// </summary>
+            public Template.EventTemplate Template
+                => Parameters?.Template ?? null;
+
+            /// <summary>
+            /// Gets the name of this event's type if a template has been loaded.
+            /// Otherwise returns null.
+            /// </summary>
+            public string TypeName
+                => Parameters?.Template?.Name;
+
+            /// <summary>
+            /// Applies a template to allow editing of the parameters.
+            /// </summary>
+            internal void ApplyTemplate(TAE containingTae, Template template)
+            {
+                if (template[containingTae.EventBank].ContainsKey(Type))
+                {
+                    if (Parameters != null)
+                    {
+                        CopyParametersToBytes(containingTae.BigEndian);
+                    }
+                    Parameters = new ParameterContainer(containingTae.BigEndian,
+                        ParameterBytes, template[containingTae.EventBank][Type]);
+                }
+            }
+
+            private void CopyParametersToBytes(bool isBigEndian)
+            {
+                if (Parameters != null)
+                    ParameterBytes = Parameters.AsBytes(isBigEndian);
+            }
 
             internal Event(float startTime, float endTime)
             {
@@ -923,23 +1126,20 @@ namespace SoulsFormats
 
             internal void WriteData(BinaryWriterEx bw, int animIndex, int eventIndex, TAEFormat format)
             {
+                CopyParametersToBytes(bw.BigEndian);
+
                 bw.FillVarint($"EventDataOffset{animIndex}:{eventIndex}", bw.Position);
                 bw.WriteInt32(Type);
 
                 if (format != TAEFormat.DS1)
                     bw.WriteInt32(Unk04);
 
-                if (Parameters == null)
-                {
+                if (format == TAEFormat.SDT && Type == 943)
                     bw.WriteVarint(0);
-                }
                 else
-                {
                     bw.WriteVarint(bw.Position + (bw.Varint64Bit ? 8 : 4));
 
-                    if (Parameters.Length > 0)
-                        bw.WriteBytes(Parameters);
-                }
+                bw.WriteBytes(ParameterBytes);
 
                 if (format != TAEFormat.DS1)
                     bw.Pad(0x10);
@@ -947,8 +1147,7 @@ namespace SoulsFormats
 
             internal void ReadParameters(BinaryReaderEx br, int byteCount)
             {
-                if (Parameters != null || byteCount > 0)
-                    Parameters = br.ReadBytes(byteCount);
+                ParameterBytes = br.ReadBytes(byteCount);
             }
 
             /// <summary>
@@ -985,12 +1184,8 @@ namespace SoulsFormats
                     //{
                     //    parametersOffset = br.AssertVarint(br.Position + (br.Varint64Bit ? 8 : 4));
                     //}
-                    var nullCheck = br.AssertVarint(br.Position + (br.Varint64Bit ? 8 : 4), 0);
+                    br.AssertVarint(br.Position + (br.Varint64Bit ? 8 : 4), 0);
                     parametersOffset = br.Position;
-                    if (nullCheck != 0)
-                    {
-                        result.Parameters = new byte[0];
-                    }
                 }
                 br.StepOut();
 

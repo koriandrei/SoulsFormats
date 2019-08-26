@@ -155,7 +155,8 @@
     <Compile Include="Formats\PARAM\PARAM.Layout.cs" />
     <Compile Include="Formats\DDS.cs" />
     <Compile Include="Formats\PMDCL.cs" />
-    <Compile Include="Formats\TAE.cs" />
+    <Compile Include="Formats\TAE\TAE.cs" />
+    <Compile Include="Formats\TAE\TAE.Template.cs" />
     <Compile Include="Formats\TPF\Headerizer.cs" />
     <Compile Include="Binder\IBinder.cs" />
     <Compile Include="Oodle26.cs" />
