@@ -269,16 +269,16 @@ namespace SoulsFormats
                                 br.AssertByte(assertAob[i]);
                             }
                             break;
-                        case ParamType.u8: case ParamType.x8: br.AssertByte(); break;
-                        case ParamType.s8: br.AssertSByte(); break;
-                        case ParamType.u16: case ParamType.x16: br.AssertUInt16(); break;
-                        case ParamType.s16: br.AssertInt16(); break;
-                        case ParamType.u32: case ParamType.x32: br.AssertUInt32(); break;
-                        case ParamType.s32: br.AssertInt32(); break;
-                        case ParamType.u64: case ParamType.x64: br.AssertUInt64(); break;
-                        case ParamType.s64: br.AssertInt64(); break;
-                        case ParamType.f32: br.AssertSingle(); break;
-                        case ParamType.f64: br.AssertDouble(); break;
+                        case ParamType.u8: case ParamType.x8: br.AssertByte((byte)ValueToAssert); break;
+                        case ParamType.s8: br.AssertSByte((sbyte)ValueToAssert); break;
+                        case ParamType.u16: case ParamType.x16: br.AssertUInt16((ushort)ValueToAssert); break;
+                        case ParamType.s16: br.AssertInt16((short)ValueToAssert); break;
+                        case ParamType.u32: case ParamType.x32: br.AssertUInt32((uint)ValueToAssert); break;
+                        case ParamType.s32: br.AssertInt32((int)ValueToAssert); break;
+                        case ParamType.u64: case ParamType.x64: br.AssertUInt64((ulong)ValueToAssert); break;
+                        case ParamType.s64: br.AssertInt64((long)ValueToAssert); break;
+                        case ParamType.f32: br.AssertSingle((float)ValueToAssert); break;
+                        case ParamType.f64: br.AssertDouble((double)ValueToAssert); break;
                         default: throw new Exception($"Invalid ParamTemplate ParamType: {Type.ToString()}");
                     }
                 }
