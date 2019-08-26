@@ -93,7 +93,7 @@ namespace SoulsFormats
             /// <summary>
             /// A template for a bank of events.
             /// </summary>
-            public class BankTemplate : Dictionary<long, EventTemplate>
+            public class BankTemplate : Dictionary<int, EventTemplate>
             {
                 /// <summary>
                 /// ID of this bank template.
@@ -285,6 +285,75 @@ namespace SoulsFormats
                     }
                 }
 
+                internal void WriteAssertValue(BinaryWriterEx bw)
+                {
+                    switch (Type)
+                    {
+                        case ParamType.aob:
+                            var assertAob = (byte[])ValueToAssert;
+                            bw.WriteBytes(assertAob);
+                            break;
+                        case ParamType.u8: case ParamType.x8: bw.WriteByte((byte)ValueToAssert); break;
+                        case ParamType.s8: bw.WriteSByte((sbyte)ValueToAssert); break;
+                        case ParamType.u16: case ParamType.x16: bw.WriteUInt16((ushort)ValueToAssert); break;
+                        case ParamType.s16: bw.WriteInt16((short)ValueToAssert); break;
+                        case ParamType.u32: case ParamType.x32: bw.WriteUInt32((uint)ValueToAssert); break;
+                        case ParamType.s32: bw.WriteInt32((int)ValueToAssert); break;
+                        case ParamType.u64: case ParamType.x64: bw.WriteUInt64((ulong)ValueToAssert); break;
+                        case ParamType.s64: bw.WriteInt64((long)ValueToAssert); break;
+                        case ParamType.f32: bw.WriteSingle((float)ValueToAssert); break;
+                        case ParamType.f64: bw.WriteDouble((double)ValueToAssert); break;
+                        default: throw new Exception($"Invalid ParamTemplate ParamType: {Type.ToString()}");
+                    }
+                }
+
+                internal void WriteDefaultValue(BinaryWriterEx bw)
+                {
+                    if (DefaultValue == null)
+                    {
+                        switch (Type)
+                        {
+                            case ParamType.aob:
+                                for (int i = 0; i < AobLength; i++)
+                                    bw.WriteByte(0);
+                                break;
+                            case ParamType.u8: case ParamType.x8: bw.WriteByte(0); break;
+                            case ParamType.s8: bw.WriteSByte(0); break;
+                            case ParamType.u16: case ParamType.x16: bw.WriteUInt16(0); break;
+                            case ParamType.s16: bw.WriteInt16(0); break;
+                            case ParamType.u32: case ParamType.x32: bw.WriteUInt32(0); break;
+                            case ParamType.s32: bw.WriteInt32(0); break;
+                            case ParamType.u64: case ParamType.x64: bw.WriteUInt64(0); break;
+                            case ParamType.s64: bw.WriteInt64(0); break;
+                            case ParamType.f32: bw.WriteSingle(0); break;
+                            case ParamType.f64: bw.WriteDouble(0); break;
+                            default: throw new Exception($"Invalid ParamTemplate ParamType: {Type.ToString()}");
+                        }
+                    }
+                    else
+                    {
+                        switch (Type)
+                        {
+                            case ParamType.aob:
+                                var assertAob = (byte[])ValueToAssert;
+                                bw.WriteBytes(assertAob);
+                                break;
+                            case ParamType.u8: case ParamType.x8: bw.WriteByte((byte)ValueToAssert); break;
+                            case ParamType.s8: bw.WriteSByte((sbyte)DefaultValue); break;
+                            case ParamType.u16: case ParamType.x16: bw.WriteUInt16((ushort)ValueToAssert); break;
+                            case ParamType.s16: bw.WriteInt16((short)ValueToAssert); break;
+                            case ParamType.u32: case ParamType.x32: bw.WriteUInt32((uint)ValueToAssert); break;
+                            case ParamType.s32: bw.WriteInt32((int)ValueToAssert); break;
+                            case ParamType.u64: case ParamType.x64: bw.WriteUInt64((ulong)ValueToAssert); break;
+                            case ParamType.s64: bw.WriteInt64((long)ValueToAssert); break;
+                            case ParamType.f32: bw.WriteSingle((float)ValueToAssert); break;
+                            case ParamType.f64: bw.WriteDouble((double)ValueToAssert); break;
+                            default: throw new Exception($"Invalid ParamTemplate ParamType: {Type.ToString()}");
+                        }
+                    }
+                    
+                }
+
                 /// <summary>
                 /// The value type of this parameter.
                 /// </summary>
@@ -299,6 +368,12 @@ namespace SoulsFormats
                 /// (Optional) The value which should be asserted on this parameter.
                 /// </summary>
                 public object ValueToAssert = null;
+
+                /// <summary>
+                /// (Optional) The default value to set when creating a new event of
+                /// this type from scratch. Otherwise a 0 value will be used in such a case.
+                /// </summary>
+                public object DefaultValue = null;
 
                 /// <summary>
                 /// (Only applies if Type == ParamType.aob)
@@ -324,10 +399,19 @@ namespace SoulsFormats
                         {
                             ValueToAssert = StringToValue(valueNode.InnerText);
                         }
+
+                        var defaultValueNode = paramNode.SelectSingleNode("default");
+                        if (defaultValueNode != null)
+                        {
+                            DefaultValue = StringToValue(defaultValueNode.InnerText);
+                        }
                     }
 
                     if (ValueToAssert == null)
                         ValueToAssert = StringToValue(paramNode.Attributes["assert"]?.InnerText);
+
+                    if (DefaultValue == null)
+                        DefaultValue = StringToValue(paramNode.Attributes["default"]?.InnerText);
 
                     var lengthAttribute = paramNode.Attributes["length"];
                     if (lengthAttribute != null)
@@ -365,12 +449,32 @@ namespace SoulsFormats
                 /// <summary>
                 /// ID of this TAE event.
                 /// </summary>
-                public readonly long ID;
+                public readonly int ID;
 
                 /// <summary>
                 /// Name of this TAE event.
                 /// </summary>
                 public string Name;
+
+                /// <summary>
+                /// Gets the default byte array for this event, using the parameters'
+                /// DefaultValue properties if applicable.
+                /// </summary>
+                public byte[] GetDefaultBytes(bool isBigEndian)
+                {
+                    using (var memStream = new System.IO.MemoryStream())
+                    {
+                        var bw = new BinaryWriterEx(isBigEndian, memStream);
+
+                        foreach (var paramKvp in this)
+                        {
+                            var p = paramKvp.Value;
+                            paramKvp.Value.WriteDefaultValue(bw);
+                        }
+
+                        return memStream.ToArray();
+                    }
+                }
 
                 /// <summary>
                 /// Gets the byte count of the entire list of parameters.
@@ -388,7 +492,7 @@ namespace SoulsFormats
                 internal EventTemplate(long bankId, XmlNode eventNode)
                     : base()
                 {
-                    ID = long.Parse(eventNode.Attributes["id"].InnerText);
+                    ID = int.Parse(eventNode.Attributes["id"].InnerText);
                     Name = eventNode.Attributes["name"].InnerText;
                     int i = 0;
                     foreach (XmlNode paramNode in eventNode.ChildNodes)

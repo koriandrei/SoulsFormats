@@ -82,6 +82,16 @@ namespace SoulsFormats
         public long EventBank;
 
         /// <summary>
+        /// The template currently applied. Set by ApplyTemplate method.
+        /// </summary>
+        public Template AppliedTemplate { get; private set; }
+
+        /// <summary>
+        /// Gets the current bank being used in the currently applied template, if a template is applied.
+        /// </summary>
+        public Template.BankTemplate BankTemplate => AppliedTemplate[EventBank];
+
+        /// <summary>
         /// Applies a template to this TAE for easier editing.
         /// After applying template, use events' .Parameters property.
         /// </summary>
@@ -104,6 +114,8 @@ namespace SoulsFormats
             {
                 throw new InvalidOperationException($"This TAE uses event bank {EventBank} but no such bank exists in the template.");
             }
+
+            AppliedTemplate = template;
         }
 
         internal override bool Is(BinaryReaderEx br)
@@ -511,6 +523,20 @@ namespace SoulsFormats
             /// Unknown.
             /// </summary>
             public string AnimFileName;
+
+            /// <summary>
+            /// Creates a new empty animation with the specified properties.
+            /// </summary>
+            public Animation(long id, bool isReference, int unk1, int unk2, string animFileName)
+            {
+                ID = id;
+                AnimFileReference = isReference;
+                Unknown1 = unk1;
+                Unknown2 = unk2;
+                AnimFileName = animFileName;
+                Events = new List<Event>();
+                EventGroups = new List<EventGroup>();
+            }
 
             internal Animation(BinaryReaderEx br, TAEFormat format, 
                 out bool lastEventNeedsParamGen, out long animFileOffset, 
@@ -1020,6 +1046,30 @@ namespace SoulsFormats
                     }
                 }
 
+                internal ParameterContainer(bool bigEndian, byte[] paramData, Template.EventTemplate template)
+                {
+                    parameterValues = new Dictionary<string, object>();
+                    Template = template;
+                    using (var memStream = new System.IO.MemoryStream(paramData))
+                    {
+                        var br = new BinaryReaderEx(bigEndian, memStream);
+                        int i = 0;
+                        foreach (var paramKvp in Template)
+                        {
+                            var p = paramKvp.Value;
+                            if (p.ValueToAssert != null)
+                            {
+                                p.AssertValue(br);
+                            }
+                            else
+                            {
+                                parameterValues.Add(p.Name, p.ReadValue(br));
+                            }
+                            i++;
+                        }
+                    }
+                }
+
                 internal byte[] AsBytes(bool bigEndian)
                 {
                     using (var memStream = new System.IO.MemoryStream())
@@ -1106,7 +1156,7 @@ namespace SoulsFormats
             /// <summary>
             /// Applies a template to allow editing of the parameters.
             /// </summary>
-            internal void ApplyTemplate(TAE containingTae, Template template, 
+            internal void ApplyTemplate(TAE containingTae, Template template,
                 long animID, int eventIndex, int eventType)
             {
                 if (template[containingTae.EventBank].ContainsKey(Type))
@@ -1120,10 +1170,66 @@ namespace SoulsFormats
                 }
             }
 
+            /// <summary>
+            /// Applies a template to allow editing of the parameters.
+            /// </summary>
+            public void ApplyTemplate(bool isBigEndian, Template.EventTemplate template)
+            {
+                if (template.ID != Type)
+                {
+                    throw new ArgumentException($"Template is for event type {template.ID} but this event is type {Type}");
+                }
+                if (Parameters != null)
+                {
+                    CopyParametersToBytes(isBigEndian);
+                }
+                Parameters = new ParameterContainer(isBigEndian, ParameterBytes, template);
+            }
+
             private void CopyParametersToBytes(bool isBigEndian)
             {
                 if (Parameters != null)
                     ParameterBytes = Parameters.AsBytes(isBigEndian);
+            }
+
+            /// <summary>
+            /// Applies a template to this TAE for editing and also wipes all
+            /// values and replaces them with default values.
+            /// </summary>
+            public void ApplyTemplateWithDefaultValues(bool isBigEndian, Template.EventTemplate template)
+            {
+                Type = template.ID;
+                ParameterBytes = template.GetDefaultBytes(isBigEndian);
+                Parameters = new ParameterContainer(isBigEndian, ParameterBytes, template);
+            }
+
+            /// <summary>
+            /// Creates a new event with the specified start time, end time, type, and unknown then
+            /// applies default values from the provided template.
+            /// </summary>
+            public Event(float startTime, float endTime, int type, int unk04, bool isBigEndian, Template.EventTemplate template)
+            {
+                StartTime = startTime;
+                EndTime = endTime;
+                Type = type;
+                Unk04 = unk04;
+                ApplyTemplateWithDefaultValues(isBigEndian, template);
+            }
+
+            /// <summary>
+            /// Creates a new event with the specified start time, end time, type, unknown, and parameters.
+            /// </summary>
+            public Event(float startTime, float endTime, int type, int unk04, byte[] parameters, bool isBigEndianParameters)
+            {
+                StartTime = startTime;
+                EndTime = endTime;
+                Type = type;
+                Unk04 = unk04;
+                ParameterBytes = parameters;
+                if (Template != null)
+                {
+                    Parameters = new ParameterContainer(isBigEndianParameters, parameters, Template);
+                }
             }
 
             internal Event(float startTime, float endTime)
