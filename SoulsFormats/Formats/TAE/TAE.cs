@@ -94,9 +94,9 @@ namespace SoulsFormats
             {
                 foreach (var anim in Animations)
                 {
-                    foreach (var evt in anim.Events)
+                    for (int i = 0; i < anim.Events.Count; i++)
                     {
-                        evt.ApplyTemplate(this, template);
+                        anim.Events[i].ApplyTemplate(this, template, anim.ID, i, anim.Events[i].Type);
                     }
                 }
             }
@@ -984,24 +984,38 @@ namespace SoulsFormats
                     return Template[paramName];
                 }
 
-                internal ParameterContainer(bool bigEndian, byte[] paramData, Template.EventTemplate template)
+                internal ParameterContainer(long animID, int eventIndex, int eventType,
+                    bool bigEndian, byte[] paramData, Template.EventTemplate template)
                 {
                     parameterValues = new Dictionary<string, object>();
                     Template = template;
                     using (var memStream = new System.IO.MemoryStream(paramData))
                     {
                         var br = new BinaryReaderEx(bigEndian, memStream);
+                        int i = 0;
                         foreach (var paramKvp in Template)
                         {
                             var p = paramKvp.Value;
                             if (p.ValueToAssert != null)
                             {
-                                p.AssertValue(br);
+                                try
+                                {
+                                    p.AssertValue(br);
+                                }
+                                catch (System.IO.InvalidDataException ex)
+                                {
+                                    var txtField = p.Name != null ? $"'{p.Name}'" : $"{(i + 1)} of {Template.Count}";
+                                    var txtEventType = Template.Name != null ? $"'{Template.Name}'" : eventType.ToString();
+
+                                    throw new Exception($"Animation {animID}\nEvent[{eventIndex}] (Type: {txtEventType})" +
+                                            $"\n  -> Assert failed on field {txtField}", ex);
+                                }
                             }
                             else
                             {
                                 parameterValues.Add(p.Name, p.ReadValue(br));
                             }
+                            i++;
                         }
                     }
                 }
@@ -1092,7 +1106,8 @@ namespace SoulsFormats
             /// <summary>
             /// Applies a template to allow editing of the parameters.
             /// </summary>
-            internal void ApplyTemplate(TAE containingTae, Template template)
+            internal void ApplyTemplate(TAE containingTae, Template template, 
+                long animID, int eventIndex, int eventType)
             {
                 if (template[containingTae.EventBank].ContainsKey(Type))
                 {
@@ -1100,8 +1115,8 @@ namespace SoulsFormats
                     {
                         CopyParametersToBytes(containingTae.BigEndian);
                     }
-                    Parameters = new ParameterContainer(containingTae.BigEndian,
-                        ParameterBytes, template[containingTae.EventBank][Type]);
+                    Parameters = new ParameterContainer(animID, eventIndex, eventType,
+                        containingTae.BigEndian, ParameterBytes, template[containingTae.EventBank][Type]);
                 }
             }
 

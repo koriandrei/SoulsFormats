@@ -166,6 +166,9 @@ namespace SoulsFormats
                 /// </summary>
                 public object StringToValue(string str)
                 {
+                    if (str == null)
+                        return null;
+
                     IEnumerable<string> GetArrayFromSingleLineString(string s)
                     {
                         return s.Split(' ')
@@ -240,7 +243,6 @@ namespace SoulsFormats
 
                 internal object ReadValue(BinaryReaderEx br)
                 {
-                    object value = null;
                     switch (Type)
                     {
                         case ParamType.aob: return br.ReadBytes(AobLength);
@@ -317,7 +319,7 @@ namespace SoulsFormats
 
                     if (paramNode.HasChildNodes)
                     {
-                        var valueNode = paramNode.SelectSingleNode("value");
+                        var valueNode = paramNode.SelectSingleNode("assert");
                         if (valueNode != null)
                         {
                             ValueToAssert = StringToValue(valueNode.InnerText);
@@ -325,7 +327,7 @@ namespace SoulsFormats
                     }
 
                     if (ValueToAssert == null)
-                        ValueToAssert = paramNode.Attributes["value"]?.InnerText;
+                        ValueToAssert = StringToValue(paramNode.Attributes["assert"]?.InnerText);
 
                     var lengthAttribute = paramNode.Attributes["length"];
                     if (lengthAttribute != null)
@@ -392,7 +394,7 @@ namespace SoulsFormats
                     foreach (XmlNode paramNode in eventNode.ChildNodes)
                     {
                         var newParam = new ParameterTemplate(bankId, ID, i++, paramNode);
-                        Add(newParam.Name, newParam);
+                        Add(newParam.Name ?? $"<UnnamedField[{i}]>", newParam);
                     }
                 }
             }
