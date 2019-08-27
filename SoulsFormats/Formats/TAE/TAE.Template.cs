@@ -442,11 +442,11 @@ namespace SoulsFormats
                 /// </summary>
                 public Dictionary<string, object> EnumEntries { get; private set; } = null;
 
-                internal ParameterTemplate(long bankId, long eventId, long paramIndex, XmlNode paramNode)
+                internal ParameterTemplate(long bankId, long eventId, long paramIndex, XmlNode paramNode, int offset)
                 {
                     Type = (ParamType)Enum.Parse(typeof(ParamType), paramNode.Name);
 
-                    Name = paramNode.Attributes["name"]?.InnerText;
+                    Name = paramNode.Attributes["name"]?.InnerText ?? $"Unk{offset:X2}";
 
                     // Load enum entries before doing default value so you can make the default value an enum entry.
                     var enumNodes = paramNode.SelectNodes("entry");
@@ -557,9 +557,11 @@ namespace SoulsFormats
                     int offset = 0;
                     foreach (XmlNode paramNode in eventNode.ChildNodes)
                     {
-                        var newParam = new ParameterTemplate(bankId, ID, i++, paramNode);
+                        if (paramNode.Name == "#comment")
+                            continue;
+                        var newParam = new ParameterTemplate(bankId, ID, i++, paramNode, offset);
                         var paramSize = newParam.GetByteCount();
-                        Add(newParam.Name ?? $"Unk{offset:X2}", newParam);
+                        Add(newParam.Name, newParam);
                         offset += paramSize;
                     }
                 }

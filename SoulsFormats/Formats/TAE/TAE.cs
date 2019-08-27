@@ -1184,6 +1184,7 @@ namespace SoulsFormats
                     {
                         CopyParametersToBytes(containingTae.BigEndian);
                     }
+                    Array.Resize(ref ParameterBytes, template[containingTae.EventBank][Type].GetAllParametersByteCount());
                     Parameters = new ParameterContainer(animID, eventIndex, eventType,
                         containingTae.BigEndian, ParameterBytes, template[containingTae.EventBank][Type]);
                 }
@@ -1202,6 +1203,7 @@ namespace SoulsFormats
                 {
                     CopyParametersToBytes(isBigEndian);
                 }
+                Array.Resize(ref ParameterBytes, template.GetAllParametersByteCount());
                 Parameters = new ParameterContainer(isBigEndian, ParameterBytes, template);
             }
 
