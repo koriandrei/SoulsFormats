@@ -1133,6 +1133,25 @@ namespace SoulsFormats
             }
 
             /// <summary>
+            /// Sets this event's parameter bytes to those specified. Updates the
+            /// .Parameters template values as well if a template is applied.
+            /// </summary>
+            public void SetParameterBytes(bool bigEndian, byte[] parameterBytes)
+            {
+                if (parameterBytes.Length != ParameterBytes.Length)
+                    throw new ArgumentException("Not the same amount of bytes as was originally here.");
+
+                ParameterBytes = parameterBytes;
+
+                if (Parameters != null)
+                {
+                    var prevTemplate = Template;
+                    Parameters = null;
+                    ApplyTemplate(bigEndian, prevTemplate);
+                }
+            }
+
+            /// <summary>
             /// Indexable parameter container of this event.
             /// Use .Parameters[name] for basic value get/set
             /// and use .GetValueType(name) to see how to convert

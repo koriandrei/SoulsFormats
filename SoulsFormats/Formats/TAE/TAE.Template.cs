@@ -140,6 +140,7 @@ namespace SoulsFormats
                         case ParamType.s8:
                         case ParamType.u8:
                         case ParamType.x8:
+                        case ParamType.b:
                             return 1;
                         case ParamType.s16:
                         case ParamType.u16:
@@ -158,6 +159,29 @@ namespace SoulsFormats
                         case ParamType.aob:
                             return AobLength;
                         default: throw new ArgumentException("Not a real ParamType");
+                    }
+                }
+
+                /// <summary>
+                /// Gets the System.Type of this parameter's value.
+                /// </summary>
+                public System.Type GetValueObjectType()
+                {
+                    switch (Type)
+                    {
+                        case ParamType.aob: return typeof(string);
+                        case ParamType.u8: case ParamType.x8: return typeof(byte);
+                        case ParamType.s8: return typeof(sbyte);
+                        case ParamType.u16: case ParamType.x16: return typeof(ushort);
+                        case ParamType.s16: return typeof(short);
+                        case ParamType.u32: case ParamType.x32: return typeof(uint);
+                        case ParamType.s32: return typeof(int);
+                        case ParamType.u64: case ParamType.x64: return typeof(ulong);
+                        case ParamType.s64: return typeof(long);
+                        case ParamType.f32: return typeof(float);
+                        case ParamType.f64: return typeof(double);
+                        case ParamType.b: return typeof(bool);
+                        default: throw new Exception($"Invalid ParamTemplate ParamType: {Type.ToString()}");
                     }
                 }
 
@@ -185,6 +209,13 @@ namespace SoulsFormats
                         return result;
                     }
 
+                    // Convert a string enum value to the actual numeric value.
+                    if (EnumEntries != null)
+                    {
+                        if (EnumEntries.ContainsKey(str))
+                            str = EnumEntries[str].ToString();
+                    }
+
                     switch (Type)
                     {
                         case ParamType.aob: return GetArrayFromString(str).Select(b => byte.Parse(b, System.Globalization.NumberStyles.HexNumber)).ToArray();
@@ -202,6 +233,14 @@ namespace SoulsFormats
                         case ParamType.s64: return long.Parse(str);
                         case ParamType.f32: return float.Parse(str);
                         case ParamType.f64: return double.Parse(str);
+                        case ParamType.b:
+                            string toLower = str.ToLower().Trim();
+                            if (toLower == "true")
+                                return true;
+                            else if (toLower == "false")
+                                return false;
+                            else
+                                throw new FormatException("Boolean value must be either 'True' or 'False', case-insensitive.");
                         default: throw new Exception($"Invalid ParamTemplate ParamType: {Type.ToString()}");
                     }
                 }
@@ -211,6 +250,14 @@ namespace SoulsFormats
                 /// </summary>
                 public string ValueToString(object val)
                 {
+                    if (EnumEntries != null)
+                    {
+                        if (EnumEntries.Values.Contains(val))
+                        {
+                            return EnumEntries.First(x => x.Value.Equals(val)).Key;
+                        }
+                    }
+
                     switch (Type)
                     {
                         case ParamType.aob: return string.Join(" ", ((byte[])val).Select(b => b.ToString("X2")));
@@ -218,6 +265,7 @@ namespace SoulsFormats
                         case ParamType.x16: return ((ushort)val).ToString("X4");
                         case ParamType.x32: return ((uint)val).ToString("X8");
                         case ParamType.x64: return ((ulong)val).ToString("X16");
+                        case ParamType.b: return ((bool)val) ? "True" : "False";
                         default: return val.ToString();
                     }
                 }
@@ -227,6 +275,7 @@ namespace SoulsFormats
                     switch (Type)
                     {
                         case ParamType.aob: bw.WriteBytes((byte[])value); break;
+                        case ParamType.b: bw.WriteBoolean((bool)value); break;
                         case ParamType.u8: case ParamType.x8: bw.WriteByte((byte)value); break;
                         case ParamType.s8: bw.WriteSByte((sbyte)value); break;
                         case ParamType.u16: case ParamType.x16: bw.WriteUInt16((ushort)value); break;
@@ -246,6 +295,7 @@ namespace SoulsFormats
                     switch (Type)
                     {
                         case ParamType.aob: return br.ReadBytes(AobLength);
+                        case ParamType.b: return br.ReadBoolean();
                         case ParamType.u8: case ParamType.x8: return br.ReadByte();
                         case ParamType.s8: return br.ReadSByte();
                         case ParamType.u16: case ParamType.x16: return br.ReadUInt16();
@@ -271,6 +321,7 @@ namespace SoulsFormats
                                 br.AssertByte(assertAob[i]);
                             }
                             break;
+                        case ParamType.b: br.AssertBoolean((bool)ValueToAssert); break;
                         case ParamType.u8: case ParamType.x8: br.AssertByte((byte)ValueToAssert); break;
                         case ParamType.s8: br.AssertSByte((sbyte)ValueToAssert); break;
                         case ParamType.u16: case ParamType.x16: br.AssertUInt16((ushort)ValueToAssert); break;
@@ -293,6 +344,7 @@ namespace SoulsFormats
                             var assertAob = (byte[])ValueToAssert;
                             bw.WriteBytes(assertAob);
                             break;
+                        case ParamType.b: bw.WriteBoolean((bool)ValueToAssert); break;
                         case ParamType.u8: case ParamType.x8: bw.WriteByte((byte)ValueToAssert); break;
                         case ParamType.s8: bw.WriteSByte((sbyte)ValueToAssert); break;
                         case ParamType.u16: case ParamType.x16: bw.WriteUInt16((ushort)ValueToAssert); break;
@@ -309,7 +361,11 @@ namespace SoulsFormats
 
                 internal void WriteDefaultValue(BinaryWriterEx bw)
                 {
-                    if (DefaultValue == null)
+                    if (ValueToAssert != null)
+                    {
+                        WriteAssertValue(bw);
+                    }
+                    else if (DefaultValue == null)
                     {
                         switch (Type)
                         {
@@ -317,7 +373,7 @@ namespace SoulsFormats
                                 for (int i = 0; i < AobLength; i++)
                                     bw.WriteByte(0);
                                 break;
-                            case ParamType.u8: case ParamType.x8: bw.WriteByte(0); break;
+                            case ParamType.b: case ParamType.u8: case ParamType.x8: bw.WriteByte(0); break;
                             case ParamType.s8: bw.WriteSByte(0); break;
                             case ParamType.u16: case ParamType.x16: bw.WriteUInt16(0); break;
                             case ParamType.s16: bw.WriteInt16(0); break;
@@ -335,19 +391,19 @@ namespace SoulsFormats
                         switch (Type)
                         {
                             case ParamType.aob:
-                                var assertAob = (byte[])ValueToAssert;
+                                var assertAob = (byte[])DefaultValue;
                                 bw.WriteBytes(assertAob);
                                 break;
-                            case ParamType.u8: case ParamType.x8: bw.WriteByte((byte)ValueToAssert); break;
+                            case ParamType.b: case ParamType.u8: case ParamType.x8: bw.WriteByte((byte)DefaultValue); break;
                             case ParamType.s8: bw.WriteSByte((sbyte)DefaultValue); break;
-                            case ParamType.u16: case ParamType.x16: bw.WriteUInt16((ushort)ValueToAssert); break;
-                            case ParamType.s16: bw.WriteInt16((short)ValueToAssert); break;
-                            case ParamType.u32: case ParamType.x32: bw.WriteUInt32((uint)ValueToAssert); break;
-                            case ParamType.s32: bw.WriteInt32((int)ValueToAssert); break;
-                            case ParamType.u64: case ParamType.x64: bw.WriteUInt64((ulong)ValueToAssert); break;
-                            case ParamType.s64: bw.WriteInt64((long)ValueToAssert); break;
-                            case ParamType.f32: bw.WriteSingle((float)ValueToAssert); break;
-                            case ParamType.f64: bw.WriteDouble((double)ValueToAssert); break;
+                            case ParamType.u16: case ParamType.x16: bw.WriteUInt16((ushort)DefaultValue); break;
+                            case ParamType.s16: bw.WriteInt16((short)DefaultValue); break;
+                            case ParamType.u32: case ParamType.x32: bw.WriteUInt32((uint)DefaultValue); break;
+                            case ParamType.s32: bw.WriteInt32((int)DefaultValue); break;
+                            case ParamType.u64: case ParamType.x64: bw.WriteUInt64((ulong)DefaultValue); break;
+                            case ParamType.s64: bw.WriteInt64((long)DefaultValue); break;
+                            case ParamType.f32: bw.WriteSingle((float)DefaultValue); break;
+                            case ParamType.f64: bw.WriteDouble((double)DefaultValue); break;
                             default: throw new Exception($"Invalid ParamTemplate ParamType: {Type.ToString()}");
                         }
                     }
@@ -392,6 +448,19 @@ namespace SoulsFormats
 
                     Name = paramNode.Attributes["name"]?.InnerText;
 
+                    // Load enum entries before doing default value so you can make the default value an enum entry.
+                    var enumNodes = paramNode.SelectNodes("entry");
+                    if (enumNodes.Count > 0)
+                    {
+                        EnumEntries = new Dictionary<string, object>();
+                        foreach (XmlNode entryNode in paramNode.SelectNodes("entry"))
+                        {
+                            var entryName = entryNode.Attributes["name"].InnerText;
+                            var entryValue = StringToValue(entryNode.Attributes["value"].InnerText);
+                            EnumEntries.Add(entryName, entryValue);
+                        }
+                    }
+
                     if (paramNode.HasChildNodes)
                     {
                         var valueNode = paramNode.SelectSingleNode("assert");
@@ -427,17 +496,7 @@ namespace SoulsFormats
                                 $"attribute was set to {AobLength}.");
                         }
                     }
-                    var enumNodes = paramNode.SelectNodes("entry");
-                    if (enumNodes.Count > 0)
-                    {
-                        EnumEntries = new Dictionary<string, object>();
-                        foreach (XmlNode entryNode in paramNode.SelectNodes("entry"))
-                        {
-                            var entryName = entryNode.Attributes["name"].InnerText;
-                            var entryValue = StringToValue(entryNode.Attributes["value"].InnerText);
-                            EnumEntries.Add(entryName, entryValue);
-                        }
-                    }
+                    
                 }
             }
 
@@ -493,12 +552,15 @@ namespace SoulsFormats
                     : base()
                 {
                     ID = int.Parse(eventNode.Attributes["id"].InnerText);
-                    Name = eventNode.Attributes["name"].InnerText;
+                    Name = eventNode.Attributes["name"]?.InnerText ?? $"Event{ID}";
                     int i = 0;
+                    int offset = 0;
                     foreach (XmlNode paramNode in eventNode.ChildNodes)
                     {
                         var newParam = new ParameterTemplate(bankId, ID, i++, paramNode);
-                        Add(newParam.Name ?? $"<UnnamedField[{i}]>", newParam);
+                        var paramSize = newParam.GetByteCount();
+                        Add(newParam.Name ?? $"Unk{offset:X2}", newParam);
+                        offset += paramSize;
                     }
                 }
             }
@@ -508,6 +570,11 @@ namespace SoulsFormats
             /// </summary>
             public enum ParamType
             {
+                /// <summary>
+                /// Single-byte boolean value.
+                /// </summary>
+                b,
+
                 /// <summary>
                 /// Unsigned byte.
                 /// </summary>
