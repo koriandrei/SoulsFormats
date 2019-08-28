@@ -89,7 +89,7 @@ namespace SoulsFormats
         /// <summary>
         /// Gets the current bank being used in the currently applied template, if a template is applied.
         /// </summary>
-        public Template.BankTemplate BankTemplate => AppliedTemplate[EventBank];
+        public Template.BankTemplate BankTemplate => AppliedTemplate?[EventBank];
 
         /// <summary>
         /// Applies a template to this TAE for easier editing.
