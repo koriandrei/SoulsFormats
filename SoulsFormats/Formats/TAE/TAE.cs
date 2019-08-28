@@ -466,7 +466,7 @@ namespace SoulsFormats
             /// <summary>
             /// ID number of this animation.
             /// </summary>
-            public long ID;
+            public long ID { get; set; }
 
             /// <summary>
             /// Timed events in this animation.
@@ -481,7 +481,7 @@ namespace SoulsFormats
             /// <summary>
             /// Unknown.
             /// </summary>
-            public bool AnimFileReference;
+            public bool AnimFileReference { get; set; }
 
             ///// <summary>
             ///// ID of animation to reference when AnimFileReference == true.
@@ -512,17 +512,17 @@ namespace SoulsFormats
             /// <summary>
             /// Unknown
             /// </summary>
-            public int Unknown1;
+            public int Unknown1 { get; set; }
 
             /// <summary>
             /// Unknown
             /// </summary>
-            public int Unknown2;
+            public int Unknown2 { get; set; }
 
             /// <summary>
             /// Unknown.
             /// </summary>
-            public string AnimFileName;
+            public string AnimFileName { get; set; }
 
             /// <summary>
             /// Creates a new empty animation with the specified properties.

@@ -484,14 +484,24 @@ namespace SoulsFormats
 
                     var lengthAttribute = paramNode.Attributes["length"];
                     if (lengthAttribute != null)
+                    {
                         AobLength = int.Parse(lengthAttribute.InnerText);
+                    }
+                    else
+                    {
+                        if (Type == ParamType.aob)
+                        {
+                            throw new Exception($"Bank {bankId} -> Event {eventId} -> Parameter {(Name != null ? $"'{Name}'" : $"{paramIndex}")} was an " +
+                                $"array of bytes but no length was specified");
+                        }
+                    }
 
                     if (Type == ParamType.aob && ValueToAssert != null)
                     {
                         var aob = (byte[])ValueToAssert;
                         if (aob.Length != AobLength)
                         {
-                            throw new Exception($"Bank {bankId} -> Event {eventId} -> Parameter '{Name}': " +
+                            throw new Exception($"Bank {bankId} -> Event {eventId} -> Parameter {(Name != null ? $"'{Name}'" : $"{paramIndex}")}: " +
                                 $"AoB assert value length was {aob.Length} but 'length' " +
                                 $"attribute was set to {AobLength}.");
                         }
