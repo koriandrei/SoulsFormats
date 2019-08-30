@@ -43,7 +43,8 @@ namespace SoulsFormats
                 //br.ReadUInt64s(1); // blah
                 Name = new HKCString(hkx, section, source, br, variation);
                 LockTranslation = br.ReadInt32();
-                br.ReadInt32(); // Padding?
+                if (variation != HKXVariation.HKXDS1)
+                    br.ReadInt32(); // Padding?
             }
 
             public override void Write(HKX hkx, HKXSection section, BinaryWriterEx bw, uint sectionBaseOffset, HKXVariation variation)
@@ -63,7 +64,7 @@ namespace SoulsFormats
 
         public class HKASkeleton : HKXObject
         {
-            public HKXLocalReference Name;
+            public HKCString Name;
             public HKArray<HKShort> ParentIndices;
             public HKArray<Bone> Bones;
             public HKArray<Transform> Transforms;
@@ -77,7 +78,7 @@ namespace SoulsFormats
                 AssertPointer(hkx, br);
                 AssertPointer(hkx, br);
 
-                br.ReadUInt64s(1); // Name
+                Name = new HKCString(hkx, section, this, br, variation);
                 ParentIndices = new HKArray<HKShort>(hkx, section, this, br, variation);
                 Bones = new HKArray<Bone>(hkx, section, this, br, variation);
                 Transforms = new HKArray<Transform>(hkx, section, this, br, variation);
@@ -129,15 +130,34 @@ namespace SoulsFormats
                 Duration = br.ReadSingle();
                 TransformTrackCount = br.ReadInt32();
                 FloatTrackCount = br.ReadInt32();
-                br.ReadInt64s(3); // Annotations
-                FrameCount = br.ReadInt32();
-                BlockCount = br.ReadInt32();
-                FramesPerBlock = br.ReadInt32();
-                MaskAndQuantization = br.ReadUInt32();
-                BlockDuration = br.ReadSingle();
-                InverseBlockDuration = br.ReadSingle();
-                FrameDuration = br.ReadSingle();
-                br.ReadUInt32(); // padding?
+
+                if (variation == HKXVariation.HKXDS1)
+                {
+                    br.ReadInt64s(2); // Annotations
+
+                    FrameCount = br.ReadInt32();
+                    BlockCount = br.ReadInt32();
+
+                    FramesPerBlock = br.ReadInt32();
+                    MaskAndQuantization = br.ReadUInt32(); 
+                    BlockDuration = br.ReadSingle();
+                    InverseBlockDuration = br.ReadSingle();
+                    FrameDuration = br.ReadSingle();
+                }
+                else
+                {
+                    br.ReadInt64s(3); // Annotations
+
+                    FrameCount = br.ReadInt32();
+                    BlockCount = br.ReadInt32();
+                    FramesPerBlock = br.ReadInt32();
+                    MaskAndQuantization = br.ReadUInt32();
+                    BlockDuration = br.ReadSingle();
+                    InverseBlockDuration = br.ReadSingle();
+                    FrameDuration = br.ReadSingle();
+                    br.ReadUInt32(); // padding?
+                }
+                
                 BlockOffsets = new HKArray<HKUInt>(hkx, section, this, br, variation);
                 FloatBlockOffsets = new HKArray<HKUInt>(hkx, section, this, br, variation);
                 TransformBlockOffsets = new HKArray<HKUInt>(hkx, section, this, br, variation);
@@ -178,16 +198,15 @@ namespace SoulsFormats
             {
                 SectionOffset = (uint)br.Position;
 
-                if (hkx.Variation != HKXVariation.HKXDS3)
-                    throw new NotImplementedException("wasnt able to test if these shits are the same");
-
                 AssertPointer(hkx, br);
                 AssertPointer(hkx, br);
                 AssertPointer(hkx, br);
                 AssertPointer(hkx, br);
                 TransformTrackToBoneIndices = new HKArray<HKShort>(hkx, section, this, br, variation);
                 FloatTrackToFloatSlotIndices = new HKArray<HKShort>(hkx, section, this, br, variation);
-                Unknown = new HKArray<HKShort>(hkx, section, this, br, variation);
+
+                if (variation != HKXVariation.HKXDS1)
+                    Unknown = new HKArray<HKShort>(hkx, section, this, br, variation);
 
                 OriginalSkeletonName = br.ReadShiftJIS();
 
@@ -232,7 +251,8 @@ namespace SoulsFormats
 
                 Duration = br.ReadSingle();
 
-                br.AssertInt32(0); // probably padding
+                if (variation != HKXVariation.HKXDS1)
+                    br.AssertInt32(0); // probably padding
 
                 ReferenceFrameSamples = new HKArray<HKVector4>(hkx, section, this, br, variation);
 

@@ -782,6 +782,7 @@ namespace SoulsFormats
                     {
                         var reference = dest.Reference;
                         reference.DestLocalOffset = dest.Dst - SectionOffset;
+                        // rodo: see why this turns ds1 parent bone indices into hkaAnimation
                         reference.DestObject = this;
                     }
                 }
@@ -1021,6 +1022,7 @@ namespace SoulsFormats
                 {
                     br.AssertUInt32(0);
                 }
+
 
                 // Resolve pointer to array data
                 LocalFixup fu = source.ResolveLocalFixup(section, pointerOffset);
