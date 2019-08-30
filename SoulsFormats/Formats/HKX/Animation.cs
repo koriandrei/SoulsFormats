@@ -78,6 +78,7 @@ namespace SoulsFormats
                 AssertPointer(hkx, br);
                 AssertPointer(hkx, br);
 
+                //br.ReadUInt64s(1); // Name
                 Name = new HKCString(hkx, section, this, br, variation);
                 ParentIndices = new HKArray<HKShort>(hkx, section, this, br, variation);
                 Bones = new HKArray<Bone>(hkx, section, this, br, variation);
