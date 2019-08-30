@@ -1010,7 +1010,7 @@ namespace SoulsFormats
                     return Template[paramName];
                 }
 
-                internal ParameterContainer(long animID, int eventIndex, int eventType,
+                internal ParameterContainer(long animID, int eventIndex,
                     bool bigEndian, byte[] paramData, Template.EventTemplate template)
                 {
                     parameterValues = new Dictionary<string, object>();
@@ -1031,15 +1031,27 @@ namespace SoulsFormats
                                 catch (System.IO.InvalidDataException ex)
                                 {
                                     var txtField = p.Name != null ? $"'{p.Name}'" : $"{(i + 1)} of {Template.Count}";
-                                    var txtEventType = Template.Name != null ? $"'{Template.Name}'" : eventType.ToString();
+                                    var txtEventType = Template.Name != null ? $"'{Template.Name}'" : Template.ID.ToString();
 
                                     throw new Exception($"Animation {animID}\nEvent[{eventIndex}] (Type: {txtEventType})" +
-                                            $"\n  -> Assert failed on field {txtField}", ex);
+                                            $"\n  -> Assert failed on field {txtField} (Type: {p.Type})", ex);
                                 }
                             }
                             else
                             {
-                                parameterValues.Add(p.Name, p.ReadValue(br));
+                                
+                                try
+                                {
+                                    parameterValues.Add(p.Name, p.ReadValue(br));
+                                }
+                                catch (Exception ex)
+                                {
+                                    var txtField = p.Name != null ? $"'{p.Name}'" : $"{(i + 1)} of {Template.Count}";
+                                    var txtEventType = Template.Name != null ? $"'{Template.Name}'" : Template.ID.ToString();
+
+                                    throw new Exception($"Animation {animID}\nEvent[{eventIndex}] (Type: {txtEventType})" +
+                                            $"\n  -> Failed to read value of field {txtField} (Type: {p.Type})", ex);
+                                }
                             }
                             i++;
                         }
@@ -1059,11 +1071,33 @@ namespace SoulsFormats
                             var p = paramKvp.Value;
                             if (p.ValueToAssert != null)
                             {
-                                p.AssertValue(br);
+                                try
+                                {
+                                    p.AssertValue(br);
+                                }
+                                catch (System.IO.InvalidDataException ex)
+                                {
+                                    var txtField = p.Name != null ? $"'{p.Name}'" : $"{(i + 1)} of {Template.Count}";
+                                    var txtEventType = Template.Name != null ? $"'{Template.Name}'" : Template.ID.ToString();
+
+                                    throw new Exception($"Event Type: {txtEventType}" +
+                                            $"\n  -> Assert failed on field {txtField}", ex);
+                                }
                             }
                             else
                             {
-                                parameterValues.Add(p.Name, p.ReadValue(br));
+                                try
+                                {
+                                    parameterValues.Add(p.Name, p.ReadValue(br));
+                                }
+                                catch (Exception ex)
+                                {
+                                    var txtField = p.Name != null ? $"'{p.Name}'" : $"{(i + 1)} of {Template.Count}";
+                                    var txtEventType = Template.Name != null ? $"'{Template.Name}'" : Template.ID.ToString();
+
+                                    throw new Exception($"Event Type: {txtEventType}" +
+                                            $"\n  -> Failed to read value of field {txtField} (Type: {p.Type})", ex);
+                                }
                             }
                             i++;
                         }
@@ -1185,7 +1219,7 @@ namespace SoulsFormats
                         CopyParametersToBytes(containingTae.BigEndian);
                     }
                     Array.Resize(ref ParameterBytes, template[containingTae.EventBank][Type].GetAllParametersByteCount());
-                    Parameters = new ParameterContainer(animID, eventIndex, eventType,
+                    Parameters = new ParameterContainer(animID, eventIndex,
                         containingTae.BigEndian, ParameterBytes, template[containingTae.EventBank][Type]);
                 }
             }
