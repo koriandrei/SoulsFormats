@@ -134,7 +134,7 @@ namespace SoulsFormats
                             {
                                 BoneWeights = new float[4];
                                 for (int i = 0; i < 4; i++)
-                                    BoneWeights[i] = br.ReadSByte() / (float)sbyte.MaxValue;
+                                    BoneWeights[i] = br.ReadByte() / (float)byte.MaxValue;
                             }
                             else if (member.Type == LayoutType.UVPair)
                             {
@@ -146,7 +146,7 @@ namespace SoulsFormats
                             {
                                 BoneWeights = new float[4];
                                 for (int i = 0; i < 4; i++)
-                                    BoneWeights[i] = br.ReadInt16() / (float)short.MaxValue;
+                                    BoneWeights[i] = br.ReadUInt16() / (float)ushort.MaxValue;
                             }
                             else
                                 throw new NotImplementedException($"Read not implemented for {member.Type} {member.Semantic}.");
