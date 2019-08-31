@@ -125,12 +125,19 @@ namespace SoulsFormats
                 SectionOffset = (uint)br.Position;
 
                 AssertPointer(hkx, br);
-                AssertPointer(hkx, br);
+
+                if (variation == HKXVariation.HKXBloodBorne)
+                    br.AssertInt32(0);
+                else
+                    AssertPointer(hkx, br);
 
                 AnimationType = br.ReadInt32();
                 Duration = br.ReadSingle();
                 TransformTrackCount = br.ReadInt32();
                 FloatTrackCount = br.ReadInt32();
+
+                if (variation == HKXVariation.HKXBloodBorne)
+                    br.Pad(16);
 
                 if (variation == HKXVariation.HKXDS1)
                 {
@@ -234,11 +241,14 @@ namespace SoulsFormats
             {
                 SectionOffset = (uint)br.Position;
 
-                // These are checked against 32-bit
                 AssertPointer(hkx, br);
                 AssertPointer(hkx, br);
-                AssertPointer(hkx, br);
-                AssertPointer(hkx, br);
+
+                if (variation != HKXVariation.HKXBloodBorne)
+                {
+                    AssertPointer(hkx, br);
+                    AssertPointer(hkx, br);
+                }
 
                 Up.X = br.ReadSingle();
                 Up.Y = br.ReadSingle();
