@@ -11,6 +11,36 @@ namespace SoulsFormats
     public partial class HKX
     {
 #pragma warning disable CS1591 // Missing XML comment for publicly visible type or member
+
+        public enum AnimationBlendHint : uint
+        {
+            /// Normal
+            NORMAL = 0,
+            /// Additive (deprecated format)
+            ADDITIVE_DEPRECATED = 1,
+            /// Additive
+            ADDITIVE = 2,
+        };
+
+        public enum AnimationType : uint
+        {
+
+            /// Should never be used
+            HK_UNKNOWN_ANIMATION = 0,
+            /// Interleaved
+            HK_INTERLEAVED_ANIMATION,
+            /// Mirrored
+            HK_MIRRORED_ANIMATION,
+            /// Spline
+            HK_SPLINE_COMPRESSED_ANIMATION,
+            /// Quantized
+            HK_QUANTIZED_COMPRESSED_ANIMATION,
+            /// Predictive
+            HK_PREDICTIVE_COMPRESSED_ANIMATION,
+            /// Reference Pose
+            HK_REFERENCE_POSE_ANIMATION,
+        };
+
         public class Transform : IHKXSerializable
         {
             public HKVector4 Position;
@@ -102,7 +132,7 @@ namespace SoulsFormats
 
         public class HKASplineCompressedAnimation : HKXObject
         {
-            public int AnimationType;
+            public AnimationType AnimationType;
             public float Duration;
             public int TransformTrackCount;
             public int FloatTrackCount;
@@ -131,7 +161,7 @@ namespace SoulsFormats
                 else
                     AssertPointer(hkx, br);
 
-                AnimationType = br.ReadInt32();
+                AnimationType = br.ReadEnum32<AnimationType>();
                 Duration = br.ReadSingle();
                 TransformTrackCount = br.ReadInt32();
                 FloatTrackCount = br.ReadInt32();
@@ -198,8 +228,8 @@ namespace SoulsFormats
             public HKArray<HKShort> TransformTrackToBoneIndices;
             public HKArray<HKShort> FloatTrackToFloatSlotIndices;
             // Not even sure this is right asdfasdf
-            public HKArray<HKShort> Unknown;
-
+            public HKArray<HKShort> PartitionIndices;
+            public AnimationBlendHint BlendHint;
             public string OriginalSkeletonName;
 
             public override void Read(HKX hkx, HKXSection section, BinaryReaderEx br, HKXVariation variation)
@@ -214,9 +244,11 @@ namespace SoulsFormats
                 FloatTrackToFloatSlotIndices = new HKArray<HKShort>(hkx, section, this, br, variation);
 
                 if (variation != HKXVariation.HKXDS1)
-                    Unknown = new HKArray<HKShort>(hkx, section, this, br, variation);
+                    PartitionIndices = new HKArray<HKShort>(hkx, section, this, br, variation);
+                else
+                    OriginalSkeletonName = br.ReadShiftJIS();
 
-                OriginalSkeletonName = br.ReadShiftJIS();
+                BlendHint = br.ReadEnum32<AnimationBlendHint>();
 
                 br.Pad(16);
 

@@ -146,7 +146,7 @@ namespace SoulsFormats
                             {
                                 BoneWeights = new float[4];
                                 for (int i = 0; i < 4; i++)
-                                    BoneWeights[i] = br.ReadUInt16() / (float)ushort.MaxValue;
+                                    BoneWeights[i] = br.ReadInt16() / (float)short.MaxValue;
                             }
                             else
                                 throw new NotImplementedException($"Read not implemented for {member.Type} {member.Semantic}.");
