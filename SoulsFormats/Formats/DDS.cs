@@ -19,7 +19,7 @@ namespace SoulsFormats
         public DDSCAPS2 dwCaps2;
         public HEADER_DXT10 header10;
 
-        public int DataOffset => ddspf.dwFourCC == "DX10" ? 0x94 : 0x80;
+        public int DataOffset => ddspf.dwFourCC == PIXELFORMAT.FourCCDX10 ? 0x94 : 0x80;
 
         /// <summary>
         /// Create a new DDS header with default values and no DX10 header.
@@ -66,7 +66,7 @@ namespace SoulsFormats
             // dwCaps3, dwCaps4, dwReserved2
             br.Skip(4 * 3);
 
-            if (ddspf.dwFourCC == "DX10")
+            if (ddspf.dwFourCC == PIXELFORMAT.FourCCDX10)
                 header10 = new HEADER_DXT10(br);
             else
                 header10 = null;
@@ -98,7 +98,7 @@ namespace SoulsFormats
             for (int i = 0; i < 3; i++)
                 bw.WriteInt32(0);
 
-            if (ddspf.dwFourCC == "DX10")
+            if (ddspf.dwFourCC == PIXELFORMAT.FourCCDX10)
                 header10.Write(bw);
 
             bw.WriteBytes(pixelData);
@@ -108,12 +108,24 @@ namespace SoulsFormats
         public class PIXELFORMAT
         {
             public DDPF dwFlags;
-            public string dwFourCC;
+            public uint dwFourCC;
+            //"DX10" little endian
+            public const uint FourCCDX10 = 0x30315844;
             public int dwRGBBitCount;
             public uint dwRBitMask;
             public uint dwGBitMask;
             public uint dwBBitMask;
             public uint dwABitMask;
+
+            public string GetFourCCAsString()
+            {
+                return System.Text.Encoding.ASCII.GetString(BitConverter.GetBytes(dwFourCC));
+            }
+
+            public void SetFourCCAsString(string val)
+            {
+                dwFourCC = BitConverter.ToUInt32(System.Text.Encoding.ASCII.GetBytes(val), 0);
+            }
 
             /// <summary>
             /// Create a new PIXELFORMAT with default values.
@@ -121,7 +133,7 @@ namespace SoulsFormats
             public PIXELFORMAT()
             {
                 dwFlags = 0;
-                dwFourCC = null;
+                dwFourCC = 0;
                 dwRGBBitCount = 0;
                 dwRBitMask = 0;
                 dwGBitMask = 0;
@@ -134,7 +146,7 @@ namespace SoulsFormats
                 // dwSize
                 br.AssertInt32(32);
                 dwFlags = (DDPF)br.ReadUInt32();
-                dwFourCC = br.ReadASCII(4);
+                dwFourCC = br.ReadUInt32();
                 dwRGBBitCount = br.ReadInt32();
                 dwRBitMask = br.ReadUInt32();
                 dwGBitMask = br.ReadUInt32();
@@ -147,7 +159,7 @@ namespace SoulsFormats
                 bw.WriteInt32(32);
                 bw.WriteUInt32((uint)dwFlags);
                 // Make sure it's 4 characters
-                bw.WriteASCII((dwFourCC ?? "").PadRight(4, '\0').Substring(0, 4));
+                bw.WriteUInt32(dwFourCC);
                 bw.WriteInt32(dwRGBBitCount);
                 bw.WriteUInt32(dwRBitMask);
                 bw.WriteUInt32(dwGBitMask);
@@ -159,10 +171,10 @@ namespace SoulsFormats
         public class HEADER_DXT10
         {
             public DXGI_FORMAT dxgiFormat;
-            public DIMENSION resourceDimension;
-            public RESOURCE_MISC miscFlag;
+            public DDS_DIMENSION resourceDimension;
+            public DDS_RESOURCE_MISC miscFlag;
             public uint arraySize;
-            public ALPHA_MODE miscFlags2;
+            public DDS_ALPHA_MODE miscFlags2;
 
             /// <summary>
             /// Creates a new DX10 header with default values.
@@ -170,19 +182,19 @@ namespace SoulsFormats
             public HEADER_DXT10()
             {
                 dxgiFormat = DXGI_FORMAT.UNKNOWN;
-                resourceDimension = DIMENSION.TEXTURE2D;
+                resourceDimension = DDS_DIMENSION.TEXTURE2D;
                 miscFlag = 0;
                 arraySize = 1;
-                miscFlags2 = ALPHA_MODE.UNKNOWN;
+                miscFlags2 = DDS_ALPHA_MODE.UNKNOWN;
             }
 
             internal HEADER_DXT10(BinaryReaderEx br)
             {
                 dxgiFormat = br.ReadEnum32<DXGI_FORMAT>();
-                resourceDimension = br.ReadEnum32<DIMENSION>();
-                miscFlag = (RESOURCE_MISC)br.ReadUInt32();
+                resourceDimension = br.ReadEnum32<DDS_DIMENSION>();
+                miscFlag = (DDS_RESOURCE_MISC)br.ReadUInt32();
                 arraySize = br.ReadUInt32();
-                miscFlags2 = br.ReadEnum32<ALPHA_MODE>();
+                miscFlags2 = br.ReadEnum32<DDS_ALPHA_MODE>();
             }
 
             internal void Write(BinaryWriterEx bw)
@@ -213,9 +225,35 @@ namespace SoulsFormats
         [Flags]
         public enum DDSCAPS : uint
         {
+            ALPHA = 0x2,
+            BACKBUFFER = 0x4,
             COMPLEX = 0x8,
+            FLIP = 0x10,
+            FRONTBUFFER = 0x20,
+            OFFSCREENPLAIN = 0x40,
+            OVERLAY = 0x80,
+            PALETTE = 0x100,
+            PRIMARYSURFACE = 0x200,
+            PRIMARYSURFACELEFT = 0x400,
+            SYSTEMMEMORY = 0x800,
             TEXTURE = 0x1000,
+            DDSCAPS_3DDEVICE = 0x2000,
+            VIDEOMEMORY = 0x4000,
+            VISIBLE = 0x8000,
+            WRITEONLY = 0x10000,
+            ZBUFFER = 0x20000,
+            OWNDC = 0x40000,
+            LIVEVIDEO = 0x80000,
+            HWCODEC = 0x100000,
+            MODEX = 0x200000,
             MIPMAP = 0x400000,
+            RESERVED2 = 0x800000,
+            ALLOCONLOAD = 0x4000000,
+            VIDEOPORT = 0x8000000,
+            LOCALVIDMEM = 0x10000000,
+            NONLOCALVIDMEM = 0x20000000,
+            STANDARDVGAMODE = 0x40000000,
+            OPTIMIZED = 0x80000000,
         }
 
         [Flags]
@@ -245,7 +283,7 @@ namespace SoulsFormats
             LUMINANCE = 0x20000,
         }
 
-        public enum DIMENSION : uint
+        public enum DDS_DIMENSION : uint
         {
             TEXTURE1D = 2,
             TEXTURE2D = 3,
@@ -253,12 +291,12 @@ namespace SoulsFormats
         }
 
         [Flags]
-        public enum RESOURCE_MISC : uint
+        public enum DDS_RESOURCE_MISC : uint
         {
             TEXTURECUBE = 0x4,
         }
 
-        public enum ALPHA_MODE : uint
+        public enum DDS_ALPHA_MODE : uint
         {
             UNKNOWN = 0,
             STRAIGHT = 1,
