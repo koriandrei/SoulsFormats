@@ -50,13 +50,13 @@ namespace SoulsFormats
                 ddspf.dwFlags = ddspfdwFlags;
 
                 if (format == 0 || format == 1)
-                    ddspf.dwFourCC = "DXT1";
+                    ddspf.SetFourCCAsString("DXT1");
                 else if (format == 3)
-                    ddspf.dwFourCC = "DXT3";
+                    ddspf.SetFourCCAsString("DXT3");
                 else if (format == 5)
-                    ddspf.dwFourCC = "DXT5";
+                    ddspf.SetFourCCAsString("DXT5");
                 else
-                    ddspf.dwFourCC = "\0\0\0\0";
+                    ddspf.dwFourCC = 0;
 
                 if (format == 9 || format == 10)
                     ddspf.dwRGBBitCount = 32;
