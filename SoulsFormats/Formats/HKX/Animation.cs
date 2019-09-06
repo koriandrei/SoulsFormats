@@ -24,7 +24,6 @@ namespace SoulsFormats
 
         public enum AnimationType : uint
         {
-
             /// Should never be used
             HK_UNKNOWN_ANIMATION = 0,
             /// Interleaved
@@ -242,13 +241,20 @@ namespace SoulsFormats
                 AssertPointer(hkx, br);
                 TransformTrackToBoneIndices = new HKArray<HKShort>(hkx, section, this, br, variation);
                 FloatTrackToFloatSlotIndices = new HKArray<HKShort>(hkx, section, this, br, variation);
+                
 
                 if (variation != HKXVariation.HKXDS1)
+                {
+                    //PartitionIndices = new HKArray<HKShort>(hkx, section, this, br, variation);
                     PartitionIndices = new HKArray<HKShort>(hkx, section, this, br, variation);
+                    BlendHint = br.ReadEnum32<AnimationBlendHint>();
+                }
                 else
+                {
+                    BlendHint = br.ReadEnum32<AnimationBlendHint>();
                     OriginalSkeletonName = br.ReadShiftJIS();
-
-                BlendHint = br.ReadEnum32<AnimationBlendHint>();
+                    br.Pad(16);
+                }
 
                 br.Pad(16);
 

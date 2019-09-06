@@ -120,7 +120,7 @@ namespace SoulsFormats
             /// </summary>
             public override string ToString()
             {
-                return $"{ReferenceID}";
+                return $"{ReferenceID} [Attach: {AttachBoneIndex}]";
             }
         }
     }

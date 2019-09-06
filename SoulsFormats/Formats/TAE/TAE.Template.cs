@@ -113,14 +113,33 @@ namespace SoulsFormats
 
                     basedOn = long.Parse(bankNode.Attributes["basedon"]?.InnerText ?? "-1");
 
+                    EventTemplate lastGoodEventTemplate = null;
+
                     foreach (XmlNode eventNode in bankNode.SelectNodes("event"))
                     {
-                        var newEvent = new EventTemplate(ID, eventNode);
-                        if (ContainsKey(newEvent.ID))
+                        try
                         {
-                            throw new Exception($"TAE Bank Template has more than one event with ID {newEvent.ID}.");
+                            var newEvent = new EventTemplate(ID, eventNode);
+                            if (ContainsKey(newEvent.ID))
+                            {
+                                throw new Exception($"TAE Bank Template has more than one event with ID {newEvent.ID}.");
+                            }
+                            Add(newEvent.ID, newEvent);
+
+                            lastGoodEventTemplate = newEvent;
                         }
-                        Add(newEvent.ID, newEvent);
+                        catch (Exception e)
+                        {
+                            if (lastGoodEventTemplate == null)
+                            {
+                                throw new Exception($"First event template in bank template {ID} failed to read:\n\n{e}");
+                            }
+                            else
+                            {
+                                throw new Exception($"Event template in bank template {ID} failed to read.\n\nLast valid event ID read: {lastGoodEventTemplate.ID}\n\nMessage:\n{e}");
+                            }
+                        }
+                        
                     }
                 }
             }
@@ -441,6 +460,15 @@ namespace SoulsFormats
                 /// Possible values if this is an enum, otherwise it's null.
                 /// </summary>
                 public Dictionary<string, object> EnumEntries { get; private set; } = null;
+
+                /// <summary>
+                /// Sorts the enum entries by key.
+                /// </summary>
+                public void SortEnumEntries()
+                {
+                    EnumEntries = EnumEntries.OrderBy(kvp => kvp.Key)
+                        .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+                }
 
                 internal ParameterTemplate(long bankId, long eventId, long paramIndex, XmlNode paramNode, int offset)
                 {
