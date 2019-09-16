@@ -504,16 +504,40 @@ namespace SoulsFormats
                         }
                     }
 
-                    if (ValueToAssert == null)
-                        ValueToAssert = StringToValue(paramNode.Attributes["assert"]?.InnerText);
-
-                    if (DefaultValue == null)
-                        DefaultValue = StringToValue(paramNode.Attributes["default"]?.InnerText);
+                    try
+                    {
+                        if (ValueToAssert == null)
+                            ValueToAssert = StringToValue(paramNode.Attributes["assert"]?.InnerText);
+                    }
+                    catch (Exception ex)
+                    {
+                        throw new Exception($"Bank {bankId} -> Event {eventId} -> Parameter {(Name != null ? $"'{Name}'" : $"{paramIndex}")}\n    Failed to read 'assert' attribute of parameter.\n\n\n{ex}");
+                    }
+                    
+                    try
+                    {
+                        if (DefaultValue == null)
+                            DefaultValue = StringToValue(paramNode.Attributes["default"]?.InnerText);
+                    }
+                    catch (Exception ex)
+                    {
+                        if (EnumEntries != null && EnumEntries.Count > 0)
+                            throw new Exception($"Bank {bankId} -> Event {eventId} -> Parameter {(Name != null ? $"'{Name}'" : $"{paramIndex}")}\n    Failed to read 'default' attribute of parameter. Note: default value must be an integer on enums.\n\n\n{ex}");
+                        else
+                            throw new Exception($"Bank {bankId} -> Event {eventId} -> Parameter {(Name != null ? $"'{Name}'" : $"{paramIndex}")}\n    Failed to read 'default' attribute of parameter.\n\n\n{ex}");
+                    }
 
                     var lengthAttribute = paramNode.Attributes["length"];
                     if (lengthAttribute != null)
                     {
-                        AobLength = int.Parse(lengthAttribute.InnerText);
+                        try
+                        {
+                            AobLength = int.Parse(lengthAttribute.InnerText);
+                        }
+                        catch (Exception ex)
+                        {
+                            throw new Exception($"Bank {bankId} -> Event {eventId} -> Parameter {(Name != null ? $"'{Name}'" : $"{paramIndex}")}\n    Failed to read 'length' attribute of parameter.\n\n\n{ex}");
+                        }
                     }
                     else
                     {

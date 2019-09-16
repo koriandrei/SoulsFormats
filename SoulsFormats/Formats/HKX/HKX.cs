@@ -52,7 +52,8 @@ namespace SoulsFormats
             Header = new HKXHeader();
             Header.Magic0 = br.AssertUInt32(0x57E0E057);
             Header.Magic1 = br.AssertUInt32(0x10C0C010);
-            Header.UserTag = br.AssertInt32(0);
+            //Header.UserTag = br.AssertInt32(0);
+            Header.UserTag = br.ReadInt32();
             Header.Version = br.AssertInt32(0x05, 0x08, 0x0B);
             if (Header.Version == 0x05)
             {

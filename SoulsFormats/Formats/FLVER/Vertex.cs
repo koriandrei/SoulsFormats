@@ -410,7 +410,7 @@ namespace SoulsFormats
                             else if (member.Type == LayoutType.Byte4C)
                             {
                                 for (int i = 0; i < 4; i++)
-                                    bw.WriteSByte((sbyte)Math.Round(BoneWeights[i] * sbyte.MaxValue));
+                                    bw.WriteByte((byte)Math.Round(BoneWeights[i] * byte.MaxValue));
                             }
                             else if (member.Type == LayoutType.UVPair)
                             {
