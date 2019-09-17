@@ -27,9 +27,14 @@ namespace SoulsFormats
         public bool BigEndian { get; set; }
 
         /// <summary>
-        /// Sets whether Varint-related methods will use 64-bit ints rather than 32-bit ones.
+        /// Varints are written as Int64 if set, otherwise Int32.
         /// </summary>
-        public bool Varint64Bit { get; set; }
+        public bool VarintLong { get; set; }
+
+        /// <summary>
+        /// Current size of varints in bytes.
+        /// </summary>
+        public int VarintSize => VarintLong ? 8 : 4;
 
         /// <summary>
         /// The underlying stream.
@@ -464,57 +469,7 @@ namespace SoulsFormats
             StepOut();
         }
         #endregion
-
-        #region Varint
-        /// <summary>
-        /// Writes either a four-byte or an eight-byte signed integer.
-        /// </summary>
-        public void WriteVarint(long value)
-        {
-            if (Varint64Bit)
-            {
-                if (BigEndian)
-                    WriteReversedBytes(BitConverter.GetBytes(value));
-                else
-                    bw.Write(value);
-            }
-            else
-            {
-                if (BigEndian)
-                    WriteReversedBytes(BitConverter.GetBytes((int)value));
-                else
-                    bw.Write((int)value);
-            }
-        }
-
-        /// <summary>
-        /// Writes an array of either four-byte or eight-byte signed integers.
-        /// </summary>
-        public void WriteVarints(IList<long> values)
-        {
-            foreach (long value in values)
-                WriteVarint(value);
-        }
-
-        /// <summary>
-        /// Reserves the current position and advances the stream by eight bytes.
-        /// </summary>
-        public void ReserveVarint(string name)
-        {
-            Reserve(name, Varint64Bit ? "Varint64" : "Varint32", Varint64Bit ? 8 : 4);
-        }
-
-        /// <summary>
-        /// Writes an eight-byte signed integer to a reserved position.
-        /// </summary>
-        public void FillVarint(string name, long value)
-        {
-            StepIn(Fill(name, Varint64Bit ? "Varint64" : "Varint32"));
-            WriteVarint(value);
-            StepOut();
-        }
-        #endregion
-
+        
         #region UInt64
         /// <summary>
         /// Writes an eight-byte unsigned integer.
@@ -552,6 +507,63 @@ namespace SoulsFormats
             StepIn(Fill(name, "UInt64"));
             WriteUInt64(value);
             StepOut();
+        }
+        #endregion
+
+        #region Varint
+        /// <summary>
+        /// Writes either a four or eight-byte signed integer depending on VarintLong.
+        /// </summary>
+        public void WriteVarint(long value)
+        {
+            if (VarintLong)
+                WriteInt64(value);
+            else
+                WriteInt32((int)value);
+        }
+
+        /// <summary>
+        /// Writes an array of either four or eight-byte signed integers depending on VarintLong.
+        /// </summary>
+        public void WriteVarints(IList<long> values)
+        {
+            foreach (long value in values)
+            {
+                if (VarintLong)
+                    WriteInt64(value);
+                else
+                    WriteInt32((int)value);
+            }
+        }
+
+        /// <summary>
+        /// Reserves the current position and advances the stream by either four or eight bytes depending on VarintLong.
+        /// </summary>
+        public void ReserveVarint(string name)
+        {
+            if (VarintLong)
+                Reserve(name, "Varint64", 8);
+            else
+                Reserve(name, "Varint32", 4);
+        }
+
+        /// <summary>
+        /// Writes either a four or eight-byte signed integer depending on VarintLong to a reserved position.
+        /// </summary>
+        public void FillVarint(string name, long value)
+        {
+            if (VarintLong)
+            {
+                StepIn(Fill(name, "Varint64"));
+                WriteInt64(value);
+                StepOut();
+            }
+            else
+            {
+                StepIn(Fill(name, "Varint32"));
+                WriteInt32((int)value);
+                StepOut();
+            }
         }
         #endregion
 

@@ -1,6 +1,6 @@
 ﻿namespace SoulsFormats
 {
-    public partial class EMEVD : SoulsFile<EMEVD>
+    public partial class EMEVD
     {
         /// <summary>
         /// An instruction given to the game which tells it to subsitute arg bytes in a particular instruction with ones defined here.
@@ -25,23 +25,22 @@
             /// <summary>
             /// Amount of bytes to copy to the target instruction's arguments.
             /// </summary>
-            public long ByteCount { get; set; }
+            public int ByteCount { get; set; }
+
+            /// <summary>
+            /// Unknown; always 0 before Sekiro, generally counts up from 1 for each parameter in an event. Does not seem to have any effect in-game.
+            /// </summary>
+            public int UnkID { get; set; }
 
             /// <summary>
             /// Creates a new Parameter with default values.
             /// </summary>
-            public Parameter()
-            {
-                InstructionIndex = 0;
-                TargetStartByte = 0;
-                SourceStartByte = 0;
-                ByteCount = 0;
-            }
+            public Parameter() { }
 
             /// <summary>
             /// Creates a Parameter with the specified values.
             /// </summary>
-            public Parameter(long instrIndex, long targetStartByte, long srcStartByte, long byteCount)
+            public Parameter(long instrIndex, long targetStartByte, long srcStartByte, int byteCount)
             {
                 InstructionIndex = instrIndex;
                 TargetStartByte = targetStartByte;
@@ -49,34 +48,22 @@
                 ByteCount = byteCount;
             }
 
-            internal Parameter(BinaryReaderEx br, GameType game)
+            internal Parameter(BinaryReaderEx br, Game format)
             {
-                InstructionIndex = ReadIntW(br, game != GameType.DS1);
-                TargetStartByte = ReadIntW(br, game != GameType.DS1);
-                SourceStartByte = ReadIntW(br, game != GameType.DS1);
-                ByteCount = ReadIntW(br, game != GameType.DS1);
-
-                if (game == GameType.DS1)
-                    br.AssertInt32(0);
+                InstructionIndex = br.ReadVarint();
+                TargetStartByte = br.ReadVarint();
+                SourceStartByte = br.ReadVarint();
+                ByteCount = br.ReadInt32();
+                UnkID = br.ReadInt32();
             }
 
-            internal void Write(BinaryWriterEx bw, GameType game)
+            internal void Write(BinaryWriterEx bw, Game format)
             {
-                if (game != GameType.DS1)
-                {
-                    bw.WriteInt64(InstructionIndex);
-                    bw.WriteInt64(TargetStartByte);
-                    bw.WriteInt64(SourceStartByte);
-                    bw.WriteInt64(ByteCount);
-                }
-                else
-                {
-                    bw.WriteInt32((int)InstructionIndex);
-                    bw.WriteInt32((int)TargetStartByte);
-                    bw.WriteInt32((int)SourceStartByte);
-                    bw.WriteInt32((int)ByteCount);
-                    bw.WriteInt32(0);
-                }
+                bw.WriteVarint(InstructionIndex);
+                bw.WriteVarint(TargetStartByte);
+                bw.WriteVarint(SourceStartByte);
+                bw.WriteInt32(ByteCount);
+                bw.WriteInt32(UnkID);
             }
         }
     }

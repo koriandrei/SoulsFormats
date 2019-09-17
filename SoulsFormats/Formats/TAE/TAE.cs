@@ -127,7 +127,7 @@ namespace SoulsFormats
         internal override void Read(BinaryReaderEx br)
         {
             br.BigEndian = false;
-            br.Varint64Bit = false;
+            br.VarintLong = false;
 
             br.AssertASCII("TAE ");
 
@@ -138,7 +138,7 @@ namespace SoulsFormats
             br.AssertByte(0);
 
             bool is64Bit = br.AssertByte(0, 0xFF) == 0xFF;
-            br.Varint64Bit = is64Bit;
+            br.VarintLong = is64Bit;
 
             // 0x1000B: DeS, DS1(R)
             // 0x1000C: DS2, DS2 SOTFS, BB, DS3
@@ -293,12 +293,12 @@ namespace SoulsFormats
 
             if (Format == TAEFormat.DS1)
             {
-                bw.Varint64Bit = false;
+                bw.VarintLong = false;
                 bw.WriteByte(0);
             }
             else
             {
-                bw.Varint64Bit = true;
+                bw.VarintLong = true;
                 bw.WriteByte(0xFF);
             }
 
@@ -596,7 +596,7 @@ namespace SoulsFormats
                                     // Read the space between the previous event's parameter start and the start of this event data.
                                     long gapBetweenEventParamOffsets = eventParameterOffsets[i] - eventParameterOffsets[i - 1];
                                     // Subtract to account for the current event's type and offset 
-                                    Events[i - 1].ReadParameters(br, (int)(gapBetweenEventParamOffsets - (br.Varint64Bit ? 16 : 8)));
+                                    Events[i - 1].ReadParameters(br, (int)(gapBetweenEventParamOffsets - (br.VarintLong ? 16 : 8)));
                                 }
                                 br.StepOut();
                             }
@@ -634,7 +634,7 @@ namespace SoulsFormats
                     br.StepIn(animFileOffset);
                     {
                         AnimFileReference = br.AssertVarint(0, 1) == 1;
-                        br.AssertVarint(br.Position + (br.Varint64Bit ? 8 : 4));
+                        br.AssertVarint(br.Position + (br.VarintLong ? 8 : 4));
                         long animFileNameOffset = br.ReadVarint();
 
                         //if (AnimFileReference)
@@ -731,7 +731,7 @@ namespace SoulsFormats
             {
                 bw.FillVarint($"AnimFileOffset{i}", bw.Position);
                 bw.WriteVarint(AnimFileReference ? 1 : 0);
-                bw.WriteVarint(bw.Position + (bw.Varint64Bit ? 8 : 4));
+                bw.WriteVarint(bw.Position + (bw.VarintLong ? 8 : 4));
                 bw.ReserveVarint("AnimFileNameOffset");
 
                 //if (AnimFileReference)
@@ -892,7 +892,7 @@ namespace SoulsFormats
                     EventType = br.ReadVarint();
                     if (format == TAEFormat.SOTFS)
                     {
-                        br.AssertVarint(br.Position + (br.Varint64Bit ? 8 : 4));
+                        br.AssertVarint(br.Position + (br.VarintLong ? 8 : 4));
                         br.AssertVarint(0);
                         br.AssertVarint(0);
                     }
@@ -931,7 +931,7 @@ namespace SoulsFormats
 
                 if (format == TAEFormat.SOTFS)
                 {
-                    bw.WriteVarint(bw.Position + (bw.Varint64Bit ? 8 : 4));
+                    bw.WriteVarint(bw.Position + (bw.VarintLong ? 8 : 4));
                     bw.WriteVarint(0);
                     bw.WriteVarint(0);
                 }
@@ -1313,7 +1313,7 @@ namespace SoulsFormats
                 if (format == TAEFormat.SDT && Type == 943)
                     bw.WriteVarint(0);
                 else
-                    bw.WriteVarint(bw.Position + (bw.Varint64Bit ? 8 : 4));
+                    bw.WriteVarint(bw.Position + (bw.VarintLong ? 8 : 4));
 
                 bw.WriteBytes(ParameterBytes);
 
@@ -1353,14 +1353,14 @@ namespace SoulsFormats
                     //if (format == TAEFormat.SDT)
                     //{
                     //    // offset will be 0 in sekiro if no parameters
-                    //    br.AssertVarint(br.Position + (br.Varint64Bit ? 8 : 4), 0);
+                    //    br.AssertVarint(br.Position + (br.VarintLong ? 8 : 4), 0);
                     //    parametersOffset = br.Position;
                     //}
                     //else
                     //{
-                    //    parametersOffset = br.AssertVarint(br.Position + (br.Varint64Bit ? 8 : 4));
+                    //    parametersOffset = br.AssertVarint(br.Position + (br.VarintLong ? 8 : 4));
                     //}
-                    br.AssertVarint(br.Position + (br.Varint64Bit ? 8 : 4), 0);
+                    br.AssertVarint(br.Position + (br.VarintLong ? 8 : 4), 0);
                     parametersOffset = br.Position;
                 }
                 br.StepOut();

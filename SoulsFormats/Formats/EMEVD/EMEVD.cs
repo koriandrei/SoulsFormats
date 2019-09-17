@@ -1,49 +1,18 @@
-﻿using System.Collections.Generic;
-using System.IO;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace SoulsFormats
 {
     /// <summary>
-    /// A list of game area logic events, each with a script.
+    /// A list of game area logic events, each with a script. Extension: *.evd, *.emevd
     /// </summary>
     public partial class EMEVD : SoulsFile<EMEVD>
     {
         /// <summary>
-        /// Defines the game for which the EMEVD file was made.
+        /// Determines the format the EMEVD will be written in.
         /// </summary>
-        public enum GameType
-        {
-            /// <summary>
-            /// Dark Souls: Prepare to Die Edition and Dark Souls Remastered
-            /// </summary>
-            DS1,
-
-            /// <summary>
-            /// Bloodborne
-            /// </summary>
-            BB,
-
-            /// <summary>
-            /// Dark Souls III
-            /// </summary>
-            DS3,
-        }
-
-        internal struct OffsetsContainer
-        {
-            public long EventsOffset;
-            public long InstructionsOffset;
-            public long EventLayersOffset;
-            public long ParametersOffset;
-            public long LinkedFilesOffset;
-            public long ArgsBlockOffset;
-            public long StringsBlockOffset;
-        }
-
-        /// <summary>
-        /// Which game this EMEVD file is for.
-        /// </summary>
-        public GameType Game { get; set; }
+        public Game Format { get; set; }
 
         /// <summary>
         /// List of events in this EMEVD.
@@ -51,14 +20,60 @@ namespace SoulsFormats
         public List<Event> Events { get; set; }
 
         /// <summary>
-        /// List of indices in the string table which correspond to linked file names used in Bloodborne and Dark Souls III.
+        /// Offsets in the string data to linked file names used in Bloodborne and Dark Souls III.
         /// </summary>
-        public List<int> LinkedFileStringIndices { get; set; }
+        public List<long> LinkedFileOffsets { get; set; }
 
         /// <summary>
-        /// List of strings indexed by instruction args and linked files.
+        /// Raw string data referenced by linked files and some instructions.
         /// </summary>
-        public List<string> StringTable { get; set; }
+        public byte[] StringData { get; set; }
+
+        /// <summary>
+        /// Creates an empty EMEVD formatted for DS1.
+        /// </summary>
+        public EMEVD() : this(Game.DarkSouls1) { }
+
+        /// <summary>
+        /// Creates an empty EMEVD with the given format.
+        /// </summary>
+        public EMEVD(Game format)
+        {
+            Format = format;
+            Events = new List<Event>();
+            LinkedFileOffsets = new List<long>();
+            StringData = new byte[0];
+        }
+
+        /// <summary>
+        /// Imports event names from an EMELD file, overwriting existing names if specified.
+        /// </summary>
+        public void ImportEMELD(EMELD eld, bool overwrite = false)
+        {
+            var names = new Dictionary<long, string>(eld.Events.Count);
+            foreach (EMELD.Event evt in eld.Events)
+                names[evt.ID] = evt.Name;
+
+            foreach (Event evt in Events)
+            {
+                if ((overwrite || evt.Name == null) && names.ContainsKey(evt.ID))
+                    evt.Name = names[evt.ID];
+            }
+        }
+
+        /// <summary>
+        /// Exports event names to an EMELD file.
+        /// </summary>
+        public EMELD ExportEMELD()
+        {
+            var eld = new EMELD(Format);
+            foreach (Event evt in Events)
+            {
+                if (evt.Name != null)
+                    eld.Events.Add(new EMELD.Event(evt.ID, evt.Name));
+            }
+            return eld;
+        }
 
         internal override bool Is(BinaryReaderEx br)
         {
@@ -69,295 +84,211 @@ namespace SoulsFormats
             return magic == "EVD\0";
         }
 
-        /// <summary>
-        /// Creates a new EMEVD for DS1 with no events.
-        /// </summary>
-        public EMEVD()
-        {
-            Game = GameType.DS1;
-            Events = new List<Event>();
-            LinkedFileStringIndices = new List<int>();
-            StringTable = new List<string>();
-        }
-
         internal override void Read(BinaryReaderEx br)
         {
             br.AssertASCII("EVD\0");
+            bool bigEndian = br.ReadBoolean();
+            bool is64Bit = br.AssertSByte(0, -1) == -1;
+            bool unk06 = br.ReadBoolean();
+            bool unk07 = br.AssertSByte(0, -1) == -1;
+            br.BigEndian = bigEndian;
+            br.VarintLong = is64Bit;
 
-            uint versionA = br.AssertUInt32(0, 0xFF00, 0x1FF00);
-            uint versionB = br.AssertUInt32(0xCC, 0xCD);
+            int version = br.AssertInt32(0xCC, 0xCD);
+            br.ReadInt32(); // File size
 
-            if (versionA == 0 && versionB == 0xCC)
-                Game = GameType.DS1;
-            else if (versionA == 0xFF00 && versionB == 0xCC)
-                Game = GameType.BB;
-            else if (versionA == 0x1FF00 && versionB == 0xCD)
-                Game = GameType.DS3;
+            if (!bigEndian && !is64Bit && !unk06 && !unk07 && version == 0xCC)
+                Format = Game.DarkSouls1;
+            else if (bigEndian && !is64Bit && !unk06 && !unk07 && version == 0xCC)
+                Format = Game.DarkSouls1BE;
+            else if (!bigEndian && is64Bit && !unk06 && !unk07 && version == 0xCC)
+                Format = Game.Bloodborne;
+            else if (!bigEndian && is64Bit && unk06 && !unk07 && version == 0xCD)
+                Format = Game.DarkSouls3;
+            else if (!bigEndian && is64Bit && unk06 && unk07 && version == 0xCD)
+                Format = Game.Sekiro;
             else
-                throw new InvalidDataException($"Invalid pair of version values in EMEVD header: 0x{versionA:X8}, 0x{versionB:X8}.");
+                throw new NotSupportedException($"Unknown EMEVD format: BigEndian={bigEndian} Is64Bit={is64Bit} Unicode={unk06} Unk07={unk07} Version=0x{version:X}");
 
-            if (Game == GameType.BB)
-                br.AssertInt64(br.Length);
-            else
-                br.AssertInt32((int)br.Length);
-
-            OffsetsContainer offsets;
-            long eventsCount = ReadIntW(br, Game != GameType.DS1);
-            offsets.EventsOffset = ReadIntW(br, Game != GameType.DS1);
-            ReadIntW(br, Game != GameType.DS1); // Instruction count
-            offsets.InstructionsOffset = ReadIntW(br, Game != GameType.DS1);
-            AssertIntW(br, Game != GameType.DS1, 0); // Unknown count 
-            ReadIntW(br, Game != GameType.DS1); // Unknown offset
-            ReadIntW(br, Game != GameType.DS1); // Event layer count
-            offsets.EventLayersOffset = ReadIntW(br, Game != GameType.DS1);
-            ReadIntW(br, Game != GameType.DS1); // Parameter count
-            offsets.ParametersOffset = ReadIntW(br, Game != GameType.DS1);
-            long linkedFilesCount = ReadIntW(br, Game != GameType.DS1);
-            offsets.LinkedFilesOffset = ReadIntW(br, Game != GameType.DS1);
-            ReadIntW(br, Game != GameType.DS1); // Args length
-            offsets.ArgsBlockOffset = ReadIntW(br, Game != GameType.DS1);
-            long stringsBlockSize = ReadIntW(br, Game != GameType.DS1);
-            offsets.StringsBlockOffset = ReadIntW(br, Game != GameType.DS1);
-
-            if (Game == GameType.DS1)
+            Offsets offsets;
+            long eventCount = br.ReadVarint();
+            offsets.Events = br.ReadVarint();
+            br.ReadVarint(); // Instruction count
+            offsets.Instructions = br.ReadVarint();
+            br.AssertVarint(0); // Unknown struct count
+            br.ReadVarint(); // Unknown struct offset
+            br.ReadVarint(); // Layer count
+            offsets.Layers = br.ReadVarint();
+            br.ReadVarint(); // Parameter count
+            offsets.Parameters = br.ReadVarint();
+            long linkedFileCount = br.ReadVarint();
+            offsets.LinkedFiles = br.ReadVarint();
+            br.ReadVarint(); // Argument data length
+            offsets.Arguments = br.ReadVarint();
+            long stringsLength = br.ReadVarint();
+            offsets.Strings = br.ReadVarint();
+            if (!is64Bit)
                 br.AssertInt32(0);
 
-            br.Position = offsets.EventsOffset;
-            Events = new List<Event>((int)eventsCount);
-            for (int i = 0; i < eventsCount; i++)
-                Events.Add(new Event(br, Game, offsets));
+            br.Position = offsets.Events;
+            Events = new List<Event>((int)eventCount);
+            for (int i = 0; i < eventCount; i++)
+                Events.Add(new Event(br, Format, offsets));
 
-            br.Position = offsets.StringsBlockOffset;
-            var stringOffsets = new List<long>();
-            while (br.Position < offsets.StringsBlockOffset + stringsBlockSize)
-            {
-                long strOffset = br.Position - offsets.StringsBlockOffset;
-                stringOffsets.Add(strOffset);
-                var str = br.ReadUTF16();
-                StringTable.Add(str);
-            }
+            br.Position = offsets.LinkedFiles;
+            LinkedFileOffsets = new List<long>(br.ReadVarints((int)linkedFileCount));
 
-            br.Position = offsets.LinkedFilesOffset;
-            for (int i = 0; i < linkedFilesCount; i++)
-            {
-                long strOffset = (Game != GameType.DS1) ? br.ReadInt64() : br.ReadInt32();
-                LinkedFileStringIndices.Add(stringOffsets.IndexOf(strOffset));
-            }
+            br.Position = offsets.Strings;
+            StringData = br.ReadBytes((int)stringsLength);
         }
 
         internal override void Write(BinaryWriterEx bw)
         {
+            bool bigEndian = Format == Game.DarkSouls1BE;
+            bool is64Bit = Format >= Game.Bloodborne;
+            bool unk06 = Format >= Game.DarkSouls3;
+            bool unk07 = Format >= Game.Sekiro;
+            int version = Format < Game.DarkSouls3 ? 0xCC : 0xCD;
+
+            var layers = new List<uint>();
+            foreach (Event evt in Events)
+            {
+                foreach (Instruction inst in evt.Instructions)
+                {
+                    if (inst.Layer.HasValue && !layers.Contains(inst.Layer.Value))
+                        layers.Add(inst.Layer.Value);
+                }
+            }
+
             bw.WriteASCII("EVD\0");
+            bw.WriteBoolean(bigEndian);
+            bw.WriteSByte((sbyte)(is64Bit ? -1 : 0));
+            bw.WriteBoolean(unk06);
+            bw.WriteSByte((sbyte)(unk07 ? -1 : 0));
+            bw.BigEndian = bigEndian;
+            bw.VarintLong = is64Bit;
 
-            if (Game == GameType.DS1)
-            {
-                bw.WriteUInt32(0);
-                bw.WriteUInt32(0xCC);
-            }
-            else if (Game == GameType.BB)
-            {
-                bw.WriteUInt32(0xFF00);
-                bw.WriteUInt32(0xCC);
-            }
-            else if (Game == GameType.DS3)
-            {
-                bw.WriteUInt32(0x1FF00);
-                bw.WriteUInt32(0xCD);
-            }
+            bw.WriteInt32(version);
+            bw.ReserveInt32("FileSize");
 
-            void ReserveIntW(string name, bool? isWide = null)
-            {
-                if (isWide ?? Game != GameType.DS1)
-                    bw.ReserveInt64(name);
-                else
-                    bw.ReserveInt32(name);
-            }
-
-            void FillIntW(string name, long value, bool? isWide = null)
-            {
-                if (isWide ?? Game != GameType.DS1)
-                    bw.FillInt64(name, value);
-                else
-                    bw.FillInt32(name, (int)value);
-            }
-
-            void WriteIntW(long value, bool? isWide = null)
-            {
-                if (isWide ?? Game != GameType.DS1)
-                    bw.WriteInt64(value);
-                else
-                    bw.WriteInt32((int)value);
-            }
-
-            if (Game == GameType.BB)
-                bw.ReserveInt64("FileLength");
-            else
-                bw.ReserveInt32("FileLength");
-
-            WriteIntW(Events.Count);
-            ReserveIntW("EventsOffset");
-            ReserveIntW("InstructionsCount");
-            ReserveIntW("InstructionsOffset");
-
-            //Dummy count. Always empty.
-            WriteIntW(0);
-            // Same as EventLayersOffset because it's always empty.
-            ReserveIntW("DummiesOffset");
-            ReserveIntW("EventLayersCount");
-            ReserveIntW("EventLayersOffset");
-            ReserveIntW("ParametersCount");
-            ReserveIntW("ParametersOffset");
-            WriteIntW(LinkedFileStringIndices.Count);
-            ReserveIntW("LinkedFilesOffset");
-            ReserveIntW("ArgsBlockSize");
-            ReserveIntW("ArgsBlockOffset");
-            ReserveIntW("StringsBlockSize");
-            ReserveIntW("StringsBlockOffset");
-
-            if (Game == GameType.DS1)
-            {
+            Offsets offsets = default;
+            bw.WriteVarint(Events.Count);
+            bw.ReserveVarint("EventsOffset");
+            bw.WriteVarint(Events.Sum(e => e.Instructions.Count));
+            bw.ReserveVarint("InstructionsOffset");
+            bw.WriteVarint(0);
+            bw.ReserveVarint("Offset3");
+            bw.WriteVarint(layers.Count);
+            bw.ReserveVarint("LayersOffset");
+            bw.WriteVarint(Events.Sum(e => e.Parameters.Count));
+            bw.ReserveVarint("ParametersOffset");
+            bw.WriteVarint(LinkedFileOffsets.Count);
+            bw.ReserveVarint("LinkedFilesOffset");
+            bw.ReserveVarint("ArgumentsLength");
+            bw.ReserveVarint("ArgumentsOffset");
+            bw.WriteVarint(StringData.Length);
+            bw.ReserveVarint("StringsOffset");
+            if (!is64Bit)
                 bw.WriteInt32(0);
-            }
 
-            // Events
-            FillIntW("EventsOffset", bw.Position);
+            offsets.Events = bw.Position;
+            bw.FillVarint("EventsOffset", bw.Position);
+            for (int i = 0; i < Events.Count; i++)
+                Events[i].Write(bw, Format, i);
+
+            offsets.Instructions = bw.Position;
+            bw.FillVarint("InstructionsOffset", bw.Position);
+            for (int i = 0; i < Events.Count; i++)
+                Events[i].WriteInstructions(bw, Format, offsets, i);
+
+            bw.FillVarint("Offset3", bw.Position);
+
+            offsets.Layers = bw.Position;
+            bw.FillVarint("LayersOffset", bw.Position);
+            var layerOffsets = new Dictionary<uint, long>(layers.Count);
+            foreach (uint layer in layers)
+            {
+                layerOffsets[layer] = bw.Position - offsets.Layers;
+                Layer.Write(bw, layer);
+            }
             for (int i = 0; i < Events.Count; i++)
             {
-                Events[i].Write(bw, Game, i);
+                Event evt = Events[i];
+                for (int j = 0; j < evt.Instructions.Count; j++)
+                    evt.Instructions[j].FillLayerOffset(bw, Format, i, j, layerOffsets);
             }
 
-            // Instructions
-            long instructionsOffset = bw.Position;
-            FillIntW("InstructionsOffset", instructionsOffset);
-            long instructionsCount = 0;
+            offsets.Arguments = bw.Position;
+            bw.FillVarint("ArgumentsOffset", bw.Position);
             for (int i = 0; i < Events.Count; i++)
             {
-                FillIntW($"EventInstructionsOffset{i}", bw.Position - instructionsOffset);
-                for (int j = 0; j < Events[i].Instructions.Count; j++)
-                {
-                    Events[i].Instructions[j].Write(bw, Game, i, j);
-                }
-                instructionsCount += Events[i].Instructions.Count;
+                Event evt = Events[i];
+                for (int j = 0; j < evt.Instructions.Count; j++)
+                    evt.Instructions[j].WriteArgs(bw, Format, offsets, i, j);
             }
-            FillIntW("InstructionsCount", instructionsCount);
+            if ((bw.Position - offsets.Arguments) % 0x10 > 0)
+            {
+                bw.WritePattern(0x10 - (int)(bw.Position - offsets.Arguments) % 0x10, 0x00);
+            }
+            bw.FillVarint("ArgumentsLength", bw.Position - offsets.Arguments);
 
-            // Dummies
-            FillIntW("DummiesOffset", bw.Position);
-
-            // EventLayers
-            long eventLayersOffset = bw.Position;
-            FillIntW("EventLayersOffset", eventLayersOffset);
-            long eventLayersCount = 0;
+            offsets.Parameters = bw.Position;
+            bw.FillVarint("ParametersOffset", bw.Position);
             for (int i = 0; i < Events.Count; i++)
-            {
-                for (int j = 0; j < Events[i].Instructions.Count; j++)
-                {
-                    if (Events[i].Instructions[j].Layer != null)
-                    {
-                        if (Game == GameType.DS3)
-                            bw.FillInt64($"InstructionLayerOffset{i}:{j}", bw.Position - eventLayersOffset);
-                        else
-                            bw.FillInt32($"InstructionLayerOffset{i}:{j}", (int)(bw.Position - eventLayersOffset));
-                        Events[i].Instructions[j].Layer.Write(bw, Game);
-                        eventLayersCount++;
-                    }
-                }
-            }
-            FillIntW("EventLayersCount", eventLayersCount);
+                Events[i].WriteParameters(bw, Format, offsets, i);
 
-            // Args
-            long argsBlockOffset = bw.Position;
-            FillIntW("ArgsBlockOffset", argsBlockOffset);
-            for (int i = 0; i < Events.Count; i++)
-            {
-                for (int j = 0; j < Events[i].Instructions.Count; j++)
-                {
-                    if (Events[i].Instructions[j].Args.Length > 0)
-                    {
-                        bw.FillInt32($"InstructionArgsOffset{i}:{j}", (int)(bw.Position - argsBlockOffset));
-                        bw.WriteBytes(Events[i].Instructions[j].Args);
-                        //bw.Pad(4);
-                    }
-                }
-            }
+            offsets.LinkedFiles = bw.Position;
+            bw.FillVarint("LinkedFilesOffset", bw.Position);
+            foreach (long offset in LinkedFileOffsets)
+                bw.WriteVarint((int)offset);
 
-            if (Game == GameType.DS1)
-            {
-                if ((bw.Position - argsBlockOffset) % 16 > 0)
-                    bw.WritePattern(16 - (int)(bw.Position - argsBlockOffset) % 16, 0x00);
-            }
-            else
-            {
-                bw.Pad(16);
-            }
+            offsets.Strings = bw.Position;
+            bw.FillVarint("StringsOffset", bw.Position);
+            bw.WriteBytes(StringData);
 
-            FillIntW("ArgsBlockSize", bw.Position - argsBlockOffset);
-
-            // Parameters
-            long parametersOffset = bw.Position;
-            FillIntW("ParametersOffset", parametersOffset);
-            long parametersCount = 0;
-            for (int i = 0; i < Events.Count; i++)
-            {
-                if (Events[i].Parameters.Count > 0)
-                {
-                    if (Game == GameType.DS3)
-                        bw.FillInt64($"EventParametersOffset{i}", bw.Position - parametersOffset);
-                    else
-                        bw.FillInt32($"EventParametersOffset{i}", (int)(bw.Position - parametersOffset));
-                    for (int j = 0; j < Events[i].Parameters.Count; j++)
-                    {
-                        Events[i].Parameters[j].Write(bw, Game);
-                    }
-                    parametersCount += Events[i].Parameters.Count;
-                }
-            }
-            FillIntW("ParametersCount", parametersCount);
-
-            // Linked Files
-            FillIntW("LinkedFilesOffset", bw.Position);
-            for (int i = 0; i < LinkedFileStringIndices.Count; i++)
-            {
-                ReserveIntW($"LinkedFileStringOffset{i}");
-            }
-
-            // Strings
-            FillIntW("StringsBlockOffset", bw.Position);
-            long stringsStartOffset = bw.Position;
-            List<long> stringTableOffsets = new List<long>();
-            for (int i = 0; i < StringTable.Count; i++)
-            {
-                stringTableOffsets.Add(bw.Position - stringsStartOffset);
-                bw.WriteUTF16(StringTable[i], terminate: true);
-            }
-            FillIntW("StringsBlockSize", bw.Position - stringsStartOffset);
-
-            // Linked Files - Second Pass
-            for (int i = 0; i < LinkedFileStringIndices.Count; i++)
-            {
-                FillIntW($"LinkedFileStringOffset{i}", stringTableOffsets[LinkedFileStringIndices[i]]);
-            }
-
-            if (Game == GameType.BB)
-                bw.FillInt64("FileLength", bw.Position);
-            else
-                bw.FillInt32("FileLength", (int)bw.Position);
+            bw.FillInt32("FileSize", (int)bw.Position);
         }
 
-        private static long ReadIntW(BinaryReaderEx br, bool wide)
+        /// <summary>
+        /// Possible configurations for EMEVD formatting.
+        /// </summary>
+        public enum Game
         {
-            if (wide)
-                return br.ReadInt64();
-            else
-                return br.ReadInt32();
+            /// <summary>
+            /// Dark Souls 1 and 2 on PC.
+            /// </summary>
+            DarkSouls1,
+
+            /// <summary>
+            /// Dark Souls 1 and 2 on PS3 and Xbox 360.
+            /// </summary>
+            DarkSouls1BE,
+
+            /// <summary>
+            /// Bloodborne and SotFS on all platforms.
+            /// </summary>
+            Bloodborne,
+
+            /// <summary>
+            /// Dark Souls 3 on all platforms.
+            /// </summary>
+            DarkSouls3,
+
+            /// <summary>
+            /// Sekiro on all platforms.
+            /// </summary>
+            Sekiro,
         }
 
-        private static void AssertIntW(BinaryReaderEx br, bool wide, int value)
+        internal struct Offsets
         {
-            if (wide)
-                br.AssertInt64(value);
-            else
-                br.AssertInt32(value);
+            public long Events;
+            public long Instructions;
+            public long Layers;
+            public long Parameters;
+            public long LinkedFiles;
+            public long Arguments;
+            public long Strings;
         }
     }
 }

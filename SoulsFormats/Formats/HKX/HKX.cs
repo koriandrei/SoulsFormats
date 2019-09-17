@@ -24,7 +24,7 @@ namespace SoulsFormats
         // Hence the enum to help disambiguate the games.
         public enum HKXVariation
         {
-            HKSDeS,
+            HKXDeS,
             HKXDS1,
             HKXDS2,
             HKXDS3,
@@ -57,7 +57,7 @@ namespace SoulsFormats
             Header.Version = br.AssertInt32(0x05, 0x08, 0x0B);
             if (Header.Version == 0x05)
             {
-                Variation = HKXVariation.HKSDeS;
+                Variation = HKXVariation.HKXDeS;
             }
             else if (Header.Version == 0x08)
             {
