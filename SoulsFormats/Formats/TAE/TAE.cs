@@ -52,7 +52,7 @@ namespace SoulsFormats
         /// <summary>
         /// ID number of this TAE.
         /// </summary>
-        public int ID;
+        public int ID { get; set; }
 
         /// <summary>
         /// Unknown flags.
@@ -62,12 +62,12 @@ namespace SoulsFormats
         /// <summary>
         /// Unknown .hkt file.
         /// </summary>
-        public string SkeletonName;
+        public string SkeletonName { get; set; }
 
         /// <summary>
         /// Unknown .sib file.
         /// </summary>
-        public string SibName;
+        public string SibName { get; set; }
 
         /// <summary>
         /// Animations controlled by this TAE.
@@ -79,7 +79,7 @@ namespace SoulsFormats
         /// Often found in OBJ TAEs.
         /// Not stored in DS1 TAE files.
         /// </summary>
-        public long EventBank;
+        public long EventBank { get; set; }
 
         /// <summary>
         /// The template currently applied. Set by ApplyTemplate method.

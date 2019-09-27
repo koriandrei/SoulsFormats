@@ -55,7 +55,7 @@ namespace SoulsFormats
         public List<AnimBoneEntry> AnimBoneEntries { get; set; }
 
         /// <summary>
-        /// List of items which affect bones in the ragdoll skeleton.
+        /// List of items which affect ragdoll bones.
         /// </summary>
         public List<RagdollBoneEntry> RagdollBoneEntries { get; set; }
 
@@ -259,23 +259,26 @@ namespace SoulsFormats
         {
             /// <summary>
             /// ID of the RagdollParam entry referenced by this ragdoll bone.
+            /// -1 to not reference an entry.
             /// </summary>
             public int RagdollParamID { get; set; } = -1;
 
             /// <summary>
-            /// Some type of unknown ID. Either -1, [2000, 2008], or 2080
+            /// The animation ID to play when this ragdoll bone is damaged.
+            /// Plays animation a99_XXXX in the TAE.
             /// </summary>
-            public short UnknownID { get; set; } = -1;
+            public short DamageAnimID { get; set; } = -1;
+
+            /// <summary>
+            /// Defines which NPC part group (if any) this ragdoll bone's collider is assigned.
+            /// Used for NPC part events in EMEVD or enemy weak points.
+            /// </summary>
+            public byte NPCPartGroupIndex { get; set; } = 0;
 
             /// <summary>
             /// Unknown.
             /// </summary>
-            public byte UnknownValueA { get; set; } = 0;
-
-            /// <summary>
-            /// Unknown.
-            /// </summary>
-            public byte UnknownValueB { get; set; } = 0;
+            public byte Unknown { get; set; } = 0;
 
             /// <summary>
             /// Unknown value unique to Bloodborne HKXPWV files.
@@ -295,9 +298,9 @@ namespace SoulsFormats
                 if (game == GameType.BB)
                 {
                     RagdollParamID = br.ReadInt32();
-                    UnknownID = br.ReadInt16();
-                    UnknownValueA = br.ReadByte();
-                    UnknownValueB = br.ReadByte();
+                    DamageAnimID = br.ReadInt16();
+                    NPCPartGroupIndex = br.ReadByte();
+                    Unknown = br.ReadByte();
                     UnknownBB = br.ReadSByte();
                     br.AssertByte(0);
                     br.AssertByte(0);
@@ -307,9 +310,9 @@ namespace SoulsFormats
                 else
                 {
                     RagdollParamID = br.ReadInt16();
-                    UnknownID = br.ReadInt16();
-                    UnknownValueA = br.ReadByte();
-                    UnknownValueB = br.ReadByte();
+                    DamageAnimID = br.ReadInt16();
+                    NPCPartGroupIndex = br.ReadByte();
+                    Unknown = br.ReadByte();
                     br.AssertByte(0);
                     br.AssertByte(0);
 
@@ -326,9 +329,9 @@ namespace SoulsFormats
                 if (game == GameType.BB)
                 {
                     bw.WriteInt32(RagdollParamID);
-                    bw.WriteInt16(UnknownID);
-                    bw.WriteByte(UnknownValueA);
-                    bw.WriteByte(UnknownValueB);
+                    bw.WriteInt16(DamageAnimID);
+                    bw.WriteByte(NPCPartGroupIndex);
+                    bw.WriteByte(Unknown);
                     bw.WriteSByte(UnknownBB);
                     bw.WriteByte(0);
                     bw.WriteByte(0);
@@ -338,9 +341,9 @@ namespace SoulsFormats
                 else
                 {
                     bw.WriteInt16((short)RagdollParamID);
-                    bw.WriteInt16(UnknownID);
-                    bw.WriteByte(UnknownValueA);
-                    bw.WriteByte(UnknownValueB);
+                    bw.WriteInt16(DamageAnimID);
+                    bw.WriteByte(NPCPartGroupIndex);
+                    bw.WriteByte(Unknown);
                     bw.WriteByte(0);
                     bw.WriteByte(0);
 
