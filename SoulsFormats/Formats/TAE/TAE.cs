@@ -552,6 +552,7 @@ namespace SoulsFormats
                     long eventHeadersOffset;
                     int eventGroupCount;
                     long eventGroupsOffset;
+                    long timesOffset;
 
                     if (format == TAEFormat.DS1)
                     {
@@ -560,7 +561,7 @@ namespace SoulsFormats
                         eventGroupCount = br.ReadInt32();
                         eventGroupsOffset = br.ReadVarint();
                         br.ReadInt32(); // Times count
-                        br.ReadVarint(); // Times offset
+                        timesOffset = br.ReadVarint(); // Times offset
                         animFileOffset = br.ReadVarint();
 
                         //For DeS assert 5 int32 == 0 here
@@ -569,7 +570,7 @@ namespace SoulsFormats
                     {
                         eventHeadersOffset = br.ReadVarint();
                         eventGroupsOffset = br.ReadVarint();
-                        br.ReadVarint(); // Times offset
+                        timesOffset = br.ReadVarint(); // Times offset
                         animFileOffset = br.ReadVarint();
                         eventCount = br.ReadInt32();
                         eventGroupCount = br.ReadInt32();
@@ -672,20 +673,30 @@ namespace SoulsFormats
                                 br.AssertVarint(0);
                         }
 
-                        if (animFileNameOffset < br.Length)
-                            AnimFileName = br.GetUTF16(animFileNameOffset);
-                        else
-                            AnimFileName = "";
+                        if (animFileNameOffset < br.Length && animFileNameOffset != timesOffset)
+                        {
+                            if (br.GetInt64(animFileNameOffset) != 1)
+                            {
+                                var floatCheck = br.GetSingle(animFileNameOffset);
+                                if (!(floatCheck >= 0.016667f && floatCheck <= 100))
+                                {
+                                    AnimFileName = br.GetUTF16(animFileNameOffset);
+                                }
+                            }
+                        }
+                        
+                        AnimFileName = AnimFileName ?? "";
+
                         // When Reference is false, there's always a filename.
                         // When true, there's usually not, but sometimes there is, and I cannot figure out why.
                         // Thus, this stupid hack to achieve byte-perfection.
-                        var animNameCheck = AnimFileName.ToLower();
-                        if (!(animNameCheck.EndsWith(".hkt") 
-                            || (format == TAEFormat.SDT && animNameCheck.EndsWith("hkt")) 
-                            || animNameCheck.EndsWith(".hkx") 
-                            || animNameCheck.EndsWith(".sib") 
-                            || animNameCheck.EndsWith(".hkxwin")))
-                            AnimFileName = "";
+                        //var animNameCheck = AnimFileName.ToLower();
+                        //if (!(animNameCheck.EndsWith(".hkt") 
+                        //    || (format == TAEFormat.SDT && animNameCheck.EndsWith("hkt")) 
+                        //    || animNameCheck.EndsWith(".hkx") 
+                        //    || animNameCheck.EndsWith(".sib") 
+                        //    || animNameCheck.EndsWith(".hkxwin")))
+                        //    AnimFileName = "";
 
                     }
                     br.StepOut();
