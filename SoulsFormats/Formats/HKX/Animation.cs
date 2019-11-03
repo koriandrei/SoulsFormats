@@ -270,8 +270,8 @@ namespace SoulsFormats
 
         public class HKADefaultAnimatedReferenceFrame : HKXObject
         {
-            System.Numerics.Vector4 Up;
-            System.Numerics.Vector4 Forward;
+            public System.Numerics.Vector4 Up;
+            public System.Numerics.Vector4 Forward;
             public float Duration;
             public HKArray<HKVector4> ReferenceFrameSamples;
 

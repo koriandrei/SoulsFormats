@@ -24,11 +24,12 @@ namespace SoulsFormats
         // Hence the enum to help disambiguate the games.
         public enum HKXVariation
         {
+            Invalid,
             HKXDeS,
             HKXDS1,
             HKXDS2,
             HKXDS3,
-            HKXBloodBorne
+            HKXBloodBorne,
         };
 
         public HKXVariation Variation = HKXVariation.HKXDS3;
