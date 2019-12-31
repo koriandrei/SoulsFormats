@@ -50,12 +50,10 @@ namespace SoulsFormats
             UnkB0 = new int[4];
         }
 
-        internal override bool Is(BinaryReaderEx br)
-        {
-            throw new NotImplementedException();
-        }
-
-        internal override void Read(BinaryReaderEx br)
+        /// <summary>
+        /// Deserializes file data from a stream.
+        /// </summary>
+        protected override void Read(BinaryReaderEx br)
         {
             br.BigEndian = false;
 
@@ -515,11 +513,6 @@ namespace SoulsFormats
                 offset += objSize;
             }
             return objs;
-        }
-
-        internal override void Write(BinaryWriterEx bw)
-        {
-            throw new NotImplementedException();
         }
     }
 }

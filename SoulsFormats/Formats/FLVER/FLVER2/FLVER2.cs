@@ -6,9 +6,9 @@ using System.Numerics;
 namespace SoulsFormats
 {
     /// <summary>
-    /// A model format used throughout the series.
+    /// A model format used since Dark Souls 1. Extension: .flv, .flver
     /// </summary>
-    public partial class FLVER2 : SoulsFile<FLVER2>
+    public partial class FLVER2 : SoulsFile<FLVER2>, IFlver
     {
         /// <summary>
         /// General values for this model.
@@ -18,12 +18,14 @@ namespace SoulsFormats
         /// <summary>
         /// Dummy polygons in this model.
         /// </summary>
-        public List<Dummy> Dummies { get; set; }
+        public List<FLVER.Dummy> Dummies { get; set; }
+        IReadOnlyList<FLVER.Dummy> IFlver.Dummies => Dummies;
 
         /// <summary>
         /// Materials in this model, usually one per mesh.
         /// </summary>
         public List<Material> Materials { get; set; }
+        IReadOnlyList<IFlverMaterial> IFlver.Materials => Materials;
 
         /// <summary>
         /// Lists of GX elements referenced by materials in DS2 and beyond.
@@ -33,12 +35,14 @@ namespace SoulsFormats
         /// <summary>
         /// Bones used by this model, may or may not be the full skeleton.
         /// </summary>
-        public List<Bone> Bones { get; set; }
+        public List<FLVER.Bone> Bones { get; set; }
+        IReadOnlyList<FLVER.Bone> IFlver.Bones => Bones;
 
         /// <summary>
         /// Individual chunks of the model.
         /// </summary>
         public List<Mesh> Meshes { get; set; }
+        IReadOnlyList<IFlverMesh> IFlver.Meshes => Meshes;
 
         /// <summary>
         /// Layouts determining how to write vertex information.
@@ -56,10 +60,10 @@ namespace SoulsFormats
         public FLVER2()
         {
             Header = new FLVERHeader();
-            Dummies = new List<Dummy>();
+            Dummies = new List<FLVER.Dummy>();
             Materials = new List<Material>();
             GXLists = new List<GXList>();
-            Bones = new List<Bone>();
+            Bones = new List<FLVER.Bone>();
             Meshes = new List<Mesh>();
             BufferLayouts = new List<BufferLayout>();
         }
@@ -67,7 +71,7 @@ namespace SoulsFormats
         /// <summary>
         /// Returns true if the data appears to be a FLVER.
         /// </summary>
-        internal override bool Is(BinaryReaderEx br)
+        protected override bool Is(BinaryReaderEx br)
         {
             if (br.Length < 0xC)
                 return false;
@@ -82,7 +86,7 @@ namespace SoulsFormats
         /// <summary>
         /// Reads FLVER data from a BinaryReaderEx.
         /// </summary>
-        internal override void Read(BinaryReaderEx br)
+        protected override void Read(BinaryReaderEx br)
         {
             br.BigEndian = false;
 
@@ -140,9 +144,9 @@ namespace SoulsFormats
             br.AssertInt32(0);
             br.AssertInt32(0);
 
-            Dummies = new List<Dummy>(dummyCount);
+            Dummies = new List<FLVER.Dummy>(dummyCount);
             for (int i = 0; i < dummyCount; i++)
-                Dummies.Add(new Dummy(br, Header));
+                Dummies.Add(new FLVER.Dummy(br, Header.Version));
 
             Materials = new List<Material>(materialCount);
             var gxListIndices = new Dictionary<int, int>();
@@ -150,9 +154,9 @@ namespace SoulsFormats
             for (int i = 0; i < materialCount; i++)
                 Materials.Add(new Material(br, Header, GXLists, gxListIndices));
 
-            Bones = new List<Bone>(boneCount);
+            Bones = new List<FLVER.Bone>(boneCount);
             for (int i = 0; i < boneCount; i++)
-                Bones.Add(new Bone(br, Header));
+                Bones.Add(new FLVER.Bone(br, Header.Unicode));
 
             Meshes = new List<Mesh>(meshCount);
             for (int i = 0; i < meshCount; i++)
@@ -202,7 +206,7 @@ namespace SoulsFormats
         /// <summary>
         /// Writes FLVER data to a BinaryWriterEx.
         /// </summary>
-        internal override void Write(BinaryWriterEx bw)
+        protected override void Write(BinaryWriterEx bw)
         {
             bw.BigEndian = Header.BigEndian;
             bw.WriteASCII("FLVER\0");
@@ -270,8 +274,8 @@ namespace SoulsFormats
             bw.WriteInt32(0);
             bw.WriteInt32(0);
 
-            foreach (Dummy dummy in Dummies)
-                dummy.Write(bw, Header);
+            foreach (FLVER.Dummy dummy in Dummies)
+                dummy.Write(bw, Header.Version);
 
             for (int i = 0; i < Materials.Count; i++)
                 Materials[i].Write(bw, i);
@@ -376,7 +380,7 @@ namespace SoulsFormats
 
             bw.Pad(0x10);
             for (int i = 0; i < Bones.Count; i++)
-                Bones[i].WriteStrings(bw, Header, i);
+                Bones[i].WriteStrings(bw, Header.Unicode, i);
 
             int alignment = Header.Version <= 0x2000E ? 0x20 : 0x10;
             bw.Pad(alignment);

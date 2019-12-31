@@ -27,12 +27,10 @@ namespace SoulsFormats
             Edges = new List<Edge>();
         }
 
-        internal override bool Is(BinaryReaderEx br)
-        {
-            throw new NotImplementedException();
-        }
-
-        internal override void Read(BinaryReaderEx br)
+        /// <summary>
+        /// Deserializes file data from a stream.
+        /// </summary>
+        protected override void Read(BinaryReaderEx br)
         {
             br.BigEndian = false;
             br.AssertInt32(4);
@@ -45,7 +43,10 @@ namespace SoulsFormats
                 Edges.Add(new Edge(br));
         }
 
-        internal override void Write(BinaryWriterEx bw)
+        /// <summary>
+        /// Serializes file data to a stream.
+        /// </summary>
+        protected override void Write(BinaryWriterEx bw)
         {
             bw.BigEndian = false;
             bw.WriteInt32(4);

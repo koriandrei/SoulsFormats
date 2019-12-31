@@ -13,12 +13,10 @@ namespace SoulsFormats.KF4
         /// </summary>
         public List<File> Files;
 
-        internal override bool Is(BinaryReaderEx br)
-        {
-            throw new NotImplementedException();
-        }
-
-        internal override void Read(BinaryReaderEx br)
+        /// <summary>
+        /// Deserializes file data from a stream.
+        /// </summary>
+        protected override void Read(BinaryReaderEx br)
         {
             br.BigEndian = false;
 
@@ -35,11 +33,6 @@ namespace SoulsFormats.KF4
             Files = new List<File>(fileCount);
             for (int i = 0; i < fileCount; i++)
                 Files.Add(new File(br));
-        }
-
-        internal override void Write(BinaryWriterEx bw)
-        {
-            throw new NotImplementedException();
         }
 
         /// <summary>

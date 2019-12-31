@@ -38,13 +38,22 @@ namespace SoulsFormats
             Goals = new List<Goal>();
         }
 
-        internal override bool Is(BinaryReaderEx br)
+        /// <summary>
+        /// Checks whether the data appears to be a file of this format.
+        /// </summary>
+        protected override bool Is(BinaryReaderEx br)
         {
+            if (br.Length < 4)
+                return false;
+
             string magic = br.GetASCII(0, 4);
             return magic == "LUAI";
         }
 
-        internal override void Read(BinaryReaderEx br)
+        /// <summary>
+        /// Deserializes file data from a stream.
+        /// </summary>
+        protected override void Read(BinaryReaderEx br)
         {
             br.BigEndian = false;
             br.AssertASCII("LUAI");
@@ -69,7 +78,10 @@ namespace SoulsFormats
                 Goals.Add(new Goal(br, LongFormat));
         }
 
-        internal override void Write(BinaryWriterEx bw)
+        /// <summary>
+        /// Serializes file data to a stream.
+        /// </summary>
+        protected override void Write(BinaryWriterEx bw)
         {
             bw.BigEndian = BigEndian;
             bw.WriteASCII("LUAI");

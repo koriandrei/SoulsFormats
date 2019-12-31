@@ -22,12 +22,10 @@ namespace SoulsFormats
             Decals = new List<Decal>();
         }
 
-        internal override bool Is(BinaryReaderEx br)
-        {
-            throw new NotImplementedException();
-        }
-
-        internal override void Read(BinaryReaderEx br)
+        /// <summary>
+        /// Deserializes file data from a stream.
+        /// </summary>
+        protected override void Read(BinaryReaderEx br)
         {
             br.BigEndian = false;
 
@@ -49,7 +47,10 @@ namespace SoulsFormats
             }
         }
 
-        internal override void Write(BinaryWriterEx bw)
+        /// <summary>
+        /// Serializes file data to a stream.
+        /// </summary>
+        protected override void Write(BinaryWriterEx bw)
         {
             bw.BigEndian = false;
 
