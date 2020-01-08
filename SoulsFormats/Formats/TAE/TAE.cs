@@ -118,13 +118,13 @@ namespace SoulsFormats
             AppliedTemplate = template;
         }
 
-        internal override bool Is(BinaryReaderEx br)
+        protected override bool Is(BinaryReaderEx br)
         {
             string magic = br.GetASCII(0, 4);
             return magic == "TAE ";
         }
 
-        internal override void Read(BinaryReaderEx br)
+        protected override void Read(BinaryReaderEx br)
         {
             br.BigEndian = false;
             br.VarintLong = false;
@@ -280,7 +280,7 @@ namespace SoulsFormats
             // Don't bother reading anim groups.
         }
 
-        internal override void Write(BinaryWriterEx bw)
+        protected override void Write(BinaryWriterEx bw)
         {
 
             bw.WriteASCII("TAE ");

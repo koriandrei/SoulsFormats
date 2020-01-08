@@ -69,12 +69,12 @@ namespace SoulsFormats
             RagdollBoneEntries = new List<RagdollBoneEntry>();
         }
 
-        internal override bool Is(BinaryReaderEx br)
+        protected override bool Is(BinaryReaderEx br)
         {
             throw new NotImplementedException();
         }
 
-        internal override void Read(BinaryReaderEx br)
+        protected override void Read(BinaryReaderEx br)
         {
             // Value should be 1 in either endianness
             int versionCheck = br.AssertInt32(1, 0x1000000);
@@ -122,7 +122,7 @@ namespace SoulsFormats
                 RagdollBoneEntries.Add(new RagdollBoneEntry(br, Game));
         }
 
-        internal override void Write(BinaryWriterEx bw)
+        protected override void Write(BinaryWriterEx bw)
         {
             bw.BigEndian = BigEndian;
 

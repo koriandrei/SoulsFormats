@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+import "google/protobuf/any.proto";
+
+package SOULS.Server;
+
+message GetRequest {
+	string path = 1;
+	
+}
+
+message GetResponse {
+	google.protobuf.Any data = 1;
+}
+
+service Server
+{
+rpc GetRpc (GetRequest) returns (GetResponse) {}
+}
