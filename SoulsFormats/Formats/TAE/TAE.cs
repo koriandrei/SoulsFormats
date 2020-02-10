@@ -540,10 +540,10 @@ namespace SoulsFormats
 
                     internal override void ReadInner(BinaryReaderEx br)
                     {
-                        IsLoopByDefault = br.ReadBoolean();
-                        ImportsHKX = br.ReadBoolean();
-                        ImportsEvents = br.ReadBoolean();
-                        br.AssertByte(0);
+                        IsLoopByDefault = br.ReadByte() != 0;
+                        ImportsHKX = br.ReadByte() != 0;
+                        ImportsEvents = br.ReadByte() != 0;
+                        br.ReadByte();
 
                         ImportFromAnimID = br.ReadInt32();
                     }
