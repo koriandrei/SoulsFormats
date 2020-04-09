@@ -55,12 +55,12 @@ namespace SoulsFormats
             Header.Magic1 = br.AssertUInt32(0x10C0C010);
             //Header.UserTag = br.AssertInt32(0);
             Header.UserTag = br.ReadInt32();
-            Header.Version = br.AssertInt32(0x05, 0x08, 0x0B);
+            Header.Version = br.AssertInt32(0x05, 0x08, 0x09, 0x0B);
             if (Header.Version == 0x05)
             {
                 Variation = HKXVariation.HKXDeS;
             }
-            else if (Header.Version == 0x08)
+            else if (Header.Version == 0x08 || Header.Version == 0x09)
             {
                 Variation = HKXVariation.HKXDS1;
             }
