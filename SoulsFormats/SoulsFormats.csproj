@@ -85,6 +85,7 @@
     <Compile Include="Formats\FLVER\VertexColor.cs" />
     <Compile Include="Formats\HKXPWV.cs" />
     <Compile Include="Formats\HKX\Animation.cs" />
+    <Compile Include="Formats\HKX\HavokAnimationData.cs" />
     <Compile Include="Formats\HKX\HKX.cs" />
     <Compile Include="Formats\GRASS.cs" />
     <Compile Include="Formats\LUAGNL.cs" />
