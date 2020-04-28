@@ -71,6 +71,10 @@ namespace SoulsFormats.Havok
         /// </summary>
         public readonly Vector4 LoopDeltaBackward;
 
+        public NewRootMotionHandlerData(HKX.HKADefaultAnimatedReferenceFrame refFrame) : this(refFrame.Up, refFrame.Forward, refFrame.Duration, refFrame.ReferenceFrameSamples.GetArrayData().Elements.Select(hkxVector=>hkxVector.Vector).ToArray())
+        {
+
+        }
 
         public NewRootMotionHandlerData(Vector4 up, Vector4 forward, float duration, Vector4[] frames)
         {
@@ -84,7 +88,7 @@ namespace SoulsFormats.Havok
         }
 
 
-        public bool Accumulate = true;
+        // public bool Accumulate = true;
 
         private Matrix4x4 GetMatrixFromSample(Vector4 sample)
         {
@@ -95,8 +99,10 @@ namespace SoulsFormats.Havok
                     new Vector3(Up.X, Up.Y, Up.Z));
         }
 
-        private Vector4 GetSample(float frame)
+        public Vector4 GetSample(float time)
         {
+            float frame = Frames.Length * time / Duration;
+
             float frameFloor = (float)Math.Floor(frame % (Frames.Length - 1));
             Vector4 sample = Frames[(int)frameFloor];
 
@@ -131,62 +137,136 @@ namespace SoulsFormats.Havok
             return start;
         }
 
-        public (Vector4 Motion, float Direction) UpdateRootMotion(Vector4 currentRootMotion, Vector4 prevFrameData, float currentDirection, float currentFrame, int loopCountDelta, bool forceAbsoluteRootMotion)
+        public (Vector3 positionChange, float directionChange) ExtractRootMotion(float previousTime, float nextTime)
         {
-            if (forceAbsoluteRootMotion)
-                return (currentRootMotion, currentDirection);
+            int fullLoops = (int)( (nextTime - previousTime) / (Duration));
 
-            var nextFrameData = GetSample(currentFrame);
-
-            if (Accumulate)
-            {
-                //currentRootMotion *= GetMatrixFromSample(nextFrameData - prevFrameData);
-
-                currentRootMotion = AddRootMotion(currentRootMotion, nextFrameData - prevFrameData, currentDirection, dontAddRotation: true);
-
-                currentRootMotion.W = nextFrameData.W;
-
-                while (loopCountDelta != 0)
+            if (nextTime > Duration  && fullLoops == 0)
                 {
-                    if (loopCountDelta > 0)
-                    {
-                        currentRootMotion = AddRootMotion(currentRootMotion, LoopDeltaForward, currentDirection, dontAddRotation: true);
-                        currentDirection += LoopDeltaForward.W;
-                        loopCountDelta--;
-                    }
-                    else if (loopCountDelta < 0)
-                    {
-                        currentRootMotion = AddRootMotion(currentRootMotion, LoopDeltaBackward, currentDirection, dontAddRotation: true);
-                        currentDirection += LoopDeltaBackward.W;
-                        loopCountDelta++;
-                    }
+                fullLoops = 1;
+            }
+
+
+            Vector4 fullLoopRootMotion = Math.Abs(fullLoops) *( fullLoops > 0 ? LoopDeltaForward : LoopDeltaBackward);
+
+
+            float startingFrame = ((previousTime % Duration) + Duration) % Duration;
+
+            float finalFrame = ((nextTime  % Duration) + Duration) % Duration;
+
+            var previousData = GetSample(startingFrame);
+
+            var nextData = GetSample(finalFrame);
+
+
+            Vector4 extractedRootMotion = nextData - previousData + fullLoopRootMotion;
+
+            return (new Vector3(extractedRootMotion.X, extractedRootMotion.Y, extractedRootMotion.Z), extractedRootMotion.W);
+        }
+
+        public (Vector4 Motion, float Direction) UpdateRootMotion(Vector4 currentRootMotion, float currentDirection, float currentFrame, int loopCountDelta)
+        {
+            var currentData = GetSample(currentFrame);
+
+            var changedRootMotion = AddRootMotion(currentRootMotion, currentData, currentDirection);
+
+            return (changedRootMotion, currentDirection);
+        }
+
+        public (Vector4 Motion, float Direction) UpdateRootMotion(Vector4 currentRootMotion, float currentDirection, float previousFrame, float currentFrame, int loopCountDelta)
+        {
+            var currentData = GetSample(currentFrame);
+
+            var previousData = GetSample(previousFrame);
+            //currentRootMotion
+            var changedRootMotion = AddRootMotion(Vector4.Zero, currentData - previousData, currentDirection);
+
+            while (loopCountDelta != 0)
+            {
+                if (loopCountDelta > 0)
+                {
+                    changedRootMotion = AddRootMotion(changedRootMotion, LoopDeltaForward, currentDirection, true);
+                    currentDirection += LoopDeltaForward.W;
+                    loopCountDelta--;
+                }
+                else if (loopCountDelta < 0)
+                {
+                    changedRootMotion = AddRootMotion(changedRootMotion, LoopDeltaBackward, currentDirection, true);
+                    currentDirection += LoopDeltaBackward.W;
+                    loopCountDelta++;
                 }
             }
-            else
-            {
-                currentDirection = 0;
-                currentRootMotion = AddRootMotion(Vector4.Zero, nextFrameData, currentDirection);
-            }
 
-            // TODO: This code remains of what was in DSAnimStudio.
-            // Maybe remove it
-            // prevFrameData = nextFrameData;
+            float rotationChange = changedRootMotion.W;
 
-            //CurrentAbsoluteRootMotion = GetMatrixFromSample(GetSample(currentFrame));
+            Vector4 hackSomething = currentRootMotion;
 
-            //if (forceAbsoluteRootMotion)
-            //{
+            hackSomething.W = 0;
 
-            //}
-            //else
-            //{
-            //    CurrentAbsoluteRootMotion *= GetMatrixFromSample(nextFrameData - prevFrameData);
-            //}
+            changedRootMotion.W = 0;
 
+            Vector4 appliedRootMotion = hackSomething + changedRootMotion;
 
-
-            return (currentRootMotion, currentDirection);
+            return (Motion: appliedRootMotion, Direction: currentDirection + rotationChange);
         }
+
+        //public (Vector4 Motion, float Direction) UpdateRootMotion(Vector4 currentRootMotion, Vector4 prevFrameData, float currentDirection, float currentFrame, int loopCountDelta)
+        //{
+        //    var nextFrameData = GetSample(currentFrame);
+
+        //    Vector4 targetRootMotion;
+
+        //    if (Accumulate)
+        //    {
+        //        //currentRootMotion *= GetMatrixFromSample(nextFrameData - prevFrameData);
+
+        //        Vector4 changedRootMotion = AddRootMotion(currentRootMotion, nextFrameData - prevFrameData, currentDirection, dontAddRotation: true);
+
+        //        changedRootMotion.W = nextFrameData.W;
+
+        //        while (loopCountDelta != 0)
+        //        {
+        //            if (loopCountDelta > 0)
+        //            {
+        //                changedRootMotion = AddRootMotion(changedRootMotion, LoopDeltaForward, currentDirection, dontAddRotation: true);
+        //                currentDirection += LoopDeltaForward.W;
+        //                loopCountDelta--;
+        //            }
+        //            else if (loopCountDelta < 0)
+        //            {
+        //                changedRootMotion = AddRootMotion(changedRootMotion, LoopDeltaBackward, currentDirection, dontAddRotation: true);
+        //                currentDirection += LoopDeltaBackward.W;
+        //                loopCountDelta++;
+        //            }
+        //        }
+
+        //        targetRootMotion = changedRootMotion;
+        //    }
+        //    else
+        //    {
+        //        currentDirection = 0;
+        //        targetRootMotion = AddRootMotion(Vector4.Zero, nextFrameData, currentDirection);
+        //    }
+
+        //    // TODO: This code remains of what was in DSAnimStudio.
+        //    // Maybe remove it
+        //    // prevFrameData = nextFrameData;
+
+        //    //CurrentAbsoluteRootMotion = GetMatrixFromSample(GetSample(currentFrame));
+
+        //    //if (forceAbsoluteRootMotion)
+        //    //{
+
+        //    //}
+        //    //else
+        //    //{
+        //    //    CurrentAbsoluteRootMotion *= GetMatrixFromSample(nextFrameData - prevFrameData);
+        //    //}
+
+
+
+        //    return (targetRootMotion, currentDirection);
+        //}
     }
 
 
