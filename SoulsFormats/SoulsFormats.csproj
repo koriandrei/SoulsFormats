@@ -171,6 +171,7 @@
     <Compile Include="Formats\TPF\TPF.cs" />
     <Compile Include="SoulsFile.cs" />
     <Compile Include="SFUtil.cs" />
+    <Compile Include="Formats\HKX\SplineCompressedAnimation.cs" />
     <Compile Include="SupportsAlphaAttribute.cs" />
   </ItemGroup>
   <ItemGroup>
