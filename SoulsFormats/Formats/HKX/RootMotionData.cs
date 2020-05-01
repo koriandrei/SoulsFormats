@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using System.Numerics;
 
 namespace SoulsFormats.Havok
@@ -98,7 +100,6 @@ namespace SoulsFormats.Havok
 
             var nextData = GetSample(nextTimeSanitized);
 
-
             return nextData - previousData;
         }
 
@@ -107,12 +108,12 @@ namespace SoulsFormats.Havok
             return ((time % Duration) + Duration) % Duration;
         }
 
-        private Vector4 ExtractExtraRootMotionInternal(float timeSinceStart, float timeUntilEnd)
+        private Vector4 ExtractExtraRootMotionInternal(float previousTime, float nextTime)
         {
-            float timeSinceStartLoopTime = ConvertToLoopTime(timeSinceStart);
-            float timeUntilEndLoopTime = ConvertToLoopTime(timeUntilEnd);
+            float timeUntilEnd = ConvertToLoopTime(previousTime);
+            float timeFromStart = ConvertToLoopTime(nextTime);
 
-            return ExtractExtraRootMotionInternal(0, timeSinceStartLoopTime) + ExtractExtraRootMotionInternal(timeUntilEndLoopTime, Duration);
+            return ExtractRootMotionInternal(timeUntilEnd, Duration) + ExtractRootMotionInternal(0, timeFromStart);
         }
 
         public (Vector3 positionChange, float directionChange) ExtractRootMotion(float previousTime, float nextTime)
