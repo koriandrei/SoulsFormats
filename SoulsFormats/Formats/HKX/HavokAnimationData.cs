@@ -9,6 +9,8 @@ namespace SoulsFormats.Havok
 {
     public struct NewBlendableTransform
     {
+        public Matrix4x4 ComposedMatrix;
+
         public Vector3 Translation;
         public Vector3 Scale;
         public Quaternion Rotation;
@@ -18,21 +20,17 @@ namespace SoulsFormats.Havok
             Translation = Vector3.Zero,
             Rotation = Quaternion.Identity,
             Scale = Vector3.One,
+
+            ComposedMatrix = Matrix4x4.Identity,
         };
 
         public static NewBlendableTransform Lerp(float lerp, NewBlendableTransform a, NewBlendableTransform b)
         {
-            Vector3 translation = Vector3.Lerp(a.Translation, b.Translation, lerp);
-
-            Vector3 scale = Vector3.Lerp(a.Scale, b.Scale, lerp);
-
-            Quaternion rotation = Quaternion.Lerp(a.Rotation, b.Rotation, lerp);
-
             return new NewBlendableTransform()
             {
-                Translation = translation,
-                Scale = scale,
-                Rotation = rotation,
+                Translation = Vector3.Lerp(a.Translation, b.Translation, lerp),
+                Scale = Vector3.Lerp(a.Scale, b.Scale, lerp),
+                Rotation = Quaternion.Lerp(a.Rotation, b.Rotation, lerp),
             };
         }
 
@@ -44,10 +42,36 @@ namespace SoulsFormats.Havok
         public Matrix4x4 GetMatrix()
         {
             return
-                //Matrix.CreateScale(Scale) *
+                Matrix4x4.CreateScale(Scale) *
                 Matrix4x4.CreateFromQuaternion(Quaternion.Normalize(Rotation)) *
-                //Matrix.CreateFromQuaternion(Rotation) *
+                //Matrix4x4.CreateFromQuaternion(Rotation) *
                 Matrix4x4.CreateTranslation(Translation);
+        }
+
+        public NewBlendableTransform Decomposed()
+        {
+            if (Matrix4x4.Decompose(ComposedMatrix, out Vector3 scale, out Quaternion rotation, out Vector3 translation))
+            {
+                Scale = scale;
+                Rotation = rotation;
+                Translation = translation;
+            }
+            else
+            {
+                //throw new Exception("REEEEEEE");
+                Scale = Vector3.One;
+                Translation = Vector3.Zero;
+                Rotation = Quaternion.Identity;
+            }
+
+            return this;
+        }
+
+        public NewBlendableTransform Composed()
+        {
+            ComposedMatrix = GetMatrix();
+
+            return this;
         }
     }
 
@@ -135,6 +159,11 @@ namespace SoulsFormats.Havok
         public int BlockCount = 1;
         public int NumFramesPerBlock = 255;
 
+        public int GetBlock(float frame)
+        {
+            return (int)((frame % FrameCount) / NumFramesPerBlock);
+        }
+
         private NewBlendableTransform GetTransformOnSpecificBlockAndFrame(int transformIndex, int block, float frame)
         {
             frame = (frame % FrameCount) % NumFramesPerBlock;
@@ -163,17 +192,17 @@ namespace SoulsFormats.Havok
             }
             else
             {
-                if (track.Mask.ScaleTypes.Contains(SplineCompressedAnimation.FlagOffset.StaticX))
+                if (track.Mask.ScaleTypes.Contains(Havok.SplineCompressedAnimation.FlagOffset.StaticX))
                     result.Scale.X = track.StaticScale.X;
                 else
                     result.Scale.X = IsAdditiveBlend ? 1 : skeleTransform.Scale.Vector.X;
 
-                if (track.Mask.ScaleTypes.Contains(SplineCompressedAnimation.FlagOffset.StaticY))
+                if (track.Mask.ScaleTypes.Contains(Havok.SplineCompressedAnimation.FlagOffset.StaticY))
                     result.Scale.Y = track.StaticScale.Y;
                 else
                     result.Scale.Y = IsAdditiveBlend ? 1 : skeleTransform.Scale.Vector.Y;
 
-                if (track.Mask.ScaleTypes.Contains(SplineCompressedAnimation.FlagOffset.StaticZ))
+                if (track.Mask.ScaleTypes.Contains(Havok.SplineCompressedAnimation.FlagOffset.StaticZ))
                     result.Scale.Z = track.StaticScale.Z;
                 else
                     result.Scale.Z = IsAdditiveBlend ? 1 : skeleTransform.Scale.Vector.Z;
@@ -231,17 +260,17 @@ namespace SoulsFormats.Havok
             }
             else
             {
-                if (track.Mask.PositionTypes.Contains(SplineCompressedAnimation.FlagOffset.StaticX))
+                if (track.Mask.PositionTypes.Contains(Havok.SplineCompressedAnimation.FlagOffset.StaticX))
                     result.Translation.X = track.StaticPosition.X;
                 else
                     result.Translation.X = IsAdditiveBlend ? 0 : skeleTransform.Position.Vector.X;
 
-                if (track.Mask.PositionTypes.Contains(SplineCompressedAnimation.FlagOffset.StaticY))
+                if (track.Mask.PositionTypes.Contains(Havok.SplineCompressedAnimation.FlagOffset.StaticY))
                     result.Translation.Y = track.StaticPosition.Y;
                 else
                     result.Translation.Y = IsAdditiveBlend ? 0 : skeleTransform.Position.Vector.Y;
 
-                if (track.Mask.PositionTypes.Contains(SplineCompressedAnimation.FlagOffset.StaticZ))
+                if (track.Mask.PositionTypes.Contains(Havok.SplineCompressedAnimation.FlagOffset.StaticZ))
                     result.Translation.Z = track.StaticPosition.Z;
                 else
                     result.Translation.Z = IsAdditiveBlend ? 0 : skeleTransform.Position.Vector.Z;
@@ -279,11 +308,6 @@ namespace SoulsFormats.Havok
             return result;
         }
 
-        public int GetBlock(float frame)
-        {
-            return (int)((frame % FrameCount) / NumFramesPerBlock);
-        }
-
         public override NewBlendableTransform GetBlendableTransformOnFrame(int hkxBoneIndex, float frame)
         {
             var track = HkxBoneIndexToTransformTrackMap[hkxBoneIndex];
@@ -311,23 +335,121 @@ namespace SoulsFormats.Havok
                 return defaultBoneTransformation;
             }
 
-            frame = (frame % FrameCount) % NumFramesPerBlock;
+            int blockIndex = GetBlock(frame);
 
-            if (frame >= FrameCount - 1)
+            float frameInBlock = (frame % (FrameCount - 1)) % NumFramesPerBlock;
+
+            NewBlendableTransform currentFrame = GetTransformOnSpecificBlockAndFrame(track,
+                    block: blockIndex, frame);
+            return currentFrame;
+
+            //if (frame >= FrameCount - 1)
+            //{
+            //    NewBlendableTransform currentFrame = GetTransformOnSpecificBlockAndFrame(track, 
+            //        block: CurrentBlock, frame: (float)Math.Floor(frame));
+            //    NewBlendableTransform nextFrame = GetTransformOnSpecificBlockAndFrame(track, block: 0, frame: 0);
+            //    currentFrame = NewBlendableTransform.Lerp(frame % 1, currentFrame, nextFrame);
+            //    return currentFrame;
+            //}
+            //// Regular frame
+            //else
+            //{
+            //    NewBlendableTransform currentFrame = GetTransformOnSpecificBlockAndFrame(track, 
+            //        block: CurrentBlock, frame);
+            //    return currentFrame;
+            //}
+        }
+    }
+
+    public class HavokAnimationData_InterleavedUncompressed : HavokAnimationData
+    {
+        public int TransformTrackCount { get; }
+        // Index into array = hkx bone index, result = transform track index.
+        public int[] HkxBoneIndexToTransformTrackMap { get; }
+        public int[] TransformTrackIndexToHkxBoneMap { get; }
+        public List<NewBlendableTransform> Transforms { get; }
+
+        public HavokAnimationData_InterleavedUncompressed(string name, HKX.HKASkeleton skeleton,
+           HKX.HKADefaultAnimatedReferenceFrame refFrame, HKX.HKAAnimationBinding binding, HKX.HKAInterleavedUncompressedAnimation anim)
+           : base(name, skeleton, refFrame, binding)
+        {
+            Duration = anim.Duration;// Math.Max(anim.Duration, anim.FrameDuration * anim.FrameCount);
+            TransformTrackCount = anim.TransformTrackCount;
+            FrameCount = (int)anim.Transforms.Capacity / anim.TransformTrackCount;
+
+            FrameDuration = Duration / FrameCount;
+
+            HkxBoneIndexToTransformTrackMap = new int[skeleton.Bones.Size];
+            TransformTrackIndexToHkxBoneMap = new int[binding.TransformTrackToBoneIndices.Size];
+
+            for (int i = 0; i < binding.TransformTrackToBoneIndices.Size; i++)
             {
-                NewBlendableTransform currentFrame = GetTransformOnSpecificBlockAndFrame(track,
-                    block: GetBlock(frame), frame: (float)Math.Floor(frame));
-                NewBlendableTransform nextFrame = GetTransformOnSpecificBlockAndFrame(track, block: 0, frame: 0);
-                currentFrame = NewBlendableTransform.Lerp(frame % 1, currentFrame, nextFrame);
-                return currentFrame;
+                TransformTrackIndexToHkxBoneMap[i] = -1;
             }
-            // Regular frame
-            else
+
+            for (int i = 0; i < skeleton.Bones.Size; i++)
             {
-                NewBlendableTransform currentFrame = GetTransformOnSpecificBlockAndFrame(track,
-                    block: GetBlock(frame), frame);
-                return currentFrame;
+                HkxBoneIndexToTransformTrackMap[i] = -1;
             }
+
+            for (int i = 0; i < binding.TransformTrackToBoneIndices.Size; i++)
+            {
+                short boneIndex = binding.TransformTrackToBoneIndices[i].data;
+                if (boneIndex >= 0)
+                    HkxBoneIndexToTransformTrackMap[boneIndex] = i;
+                TransformTrackIndexToHkxBoneMap[i] = boneIndex;
+            }
+
+            Transforms = new List<NewBlendableTransform>((int)anim.Transforms.Capacity);
+
+            foreach (var t in anim.Transforms.GetArrayData().Elements)
+            {
+                Transforms.Add(new NewBlendableTransform()
+                {
+                    Translation = new Vector3(t.Position.Vector.X, t.Position.Vector.Y, t.Position.Vector.Z),
+                    Scale = new Vector3(t.Scale.Vector.X, t.Scale.Vector.Y, t.Scale.Vector.Z),
+                    Rotation = new Quaternion(t.Rotation.Vector.X, t.Rotation.Vector.Y, t.Rotation.Vector.Z, t.Rotation.Vector.W)
+                });
+            }
+        }
+
+        public override NewBlendableTransform GetBlendableTransformOnFrame(int hkxBoneIndex, float frame)
+        {
+            var track = HkxBoneIndexToTransformTrackMap[hkxBoneIndex];
+
+            if (track == -1)
+            {
+                var skeleTransform = hkaSkeleton.Transforms.GetArrayData().Elements[hkxBoneIndex];
+
+                NewBlendableTransform defaultBoneTransformation = new NewBlendableTransform();
+
+                defaultBoneTransformation.Scale.X = skeleTransform.Scale.Vector.X;
+                defaultBoneTransformation.Scale.Y = skeleTransform.Scale.Vector.Y;
+                defaultBoneTransformation.Scale.Z = skeleTransform.Scale.Vector.Z;
+
+                defaultBoneTransformation.Rotation = new Quaternion(
+                    skeleTransform.Rotation.Vector.X,
+                    skeleTransform.Rotation.Vector.Y,
+                    skeleTransform.Rotation.Vector.Z,
+                    skeleTransform.Rotation.Vector.W);
+
+                defaultBoneTransformation.Translation.X = skeleTransform.Position.Vector.X;
+                defaultBoneTransformation.Translation.Y = skeleTransform.Position.Vector.Y;
+                defaultBoneTransformation.Translation.Z = skeleTransform.Position.Vector.Z;
+
+                return defaultBoneTransformation;
+            }
+
+            float loopedFrame = frame % (FrameCount - 1);
+
+            NewBlendableTransform currentFrame = GetTransformOnFrame((int)Math.Floor(loopedFrame), track);
+            NewBlendableTransform nextFrame = GetTransformOnFrame((loopedFrame >= FrameCount - 2) ? 0 : (int)(Math.Ceiling(loopedFrame)), track);
+            return NewBlendableTransform.Lerp(loopedFrame % 1, currentFrame, nextFrame);
+        }
+
+        public NewBlendableTransform GetTransformOnFrame(int frame, int trackIndex)
+        {
+            return Transforms[(TransformTrackCount * frame) + trackIndex];
         }
     }
 }
